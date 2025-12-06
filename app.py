@@ -10,22 +10,17 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# --- 1. 인증 및 연결 (가장 튼튼한 버전) ---
+# --- 1. 인증 (끈질기게 기억하는 버전) ---
 def get_creds():
-    # 1순위: Secrets 확인 (형식이 조금 틀려도 최대한 읽어보려 노력함)
+    # 1. Secrets 먼저 시도
     if "gcp_service_account" in st.secrets:
         try:
             secrets_data = st.secrets["gcp_service_account"]
-            # info = """...""" 형태로 저장된 경우
-            if "info" in secrets_data:
-                return json.loads(secrets_data["info"])
-            # 그냥 내용이 바로 저장된 경우
-            else:
-                return dict(secrets_data)
-        except:
-            pass # Secrets가 이상하면 무시하고 다음 단계(파일 업로드)로 넘어감
-
-    # 2순위: 이미 업로드한 파일이 있는지 확인 (새로고침 해도 유지되게)
+            if "info" in secrets_data: return json.loads(secrets_data["info"])
+            else: return dict(secrets_data)
+        except: pass
+    
+    # 2. 업로드했던 파일이 있나 확인 (Session State)
     if "uploaded_creds" in st.session_state:
         return st.session_state.uploaded_creds
         
@@ -33,25 +28,21 @@ def get_creds():
 
 creds_dict = get_creds()
 
-# 인증 파일 없으면 업로더 표시
+# 인증 파일 없으면 업로더 표시 (하지만 한번 올리면 절대 안 물어봄)
 if creds_dict is None:
     st.warning("⚠️ **로봇 열쇠 파일(JSON)**을 업로드해주세요.")
-    # key를 고정해서 에러 방지
     uploaded_file = st.file_uploader("JSON 파일 드래그 & 드롭", type="json", key="auth_file")
     
     if uploaded_file:
         try:
             creds = json.load(uploaded_file)
             if "client_email" in creds:
-                # [핵심] 업로드한 열쇠를 앱이 기억하게 저장
                 st.session_state.uploaded_creds = creds
-                st.success("✅ 인증 성공! (잠시만 기다리세요...)")
+                st.success("✅ 인증 성공! (새로고침 중...)")
                 st.rerun()
-            else: 
-                st.error("🚨 올바른 키 파일이 아닙니다.")
-        except: 
-            st.error("🚨 파일 읽기 오류")
-    st.stop() # 인증 전에는 아래 코드 실행 막기
+            else: st.error("🚨 올바른 키 파일이 아닙니다.")
+        except: st.error("🚨 파일 읽기 오류")
+    st.stop()
 
 # --- 2. 구글 시트 연결 ---
 def get_client():
@@ -69,7 +60,6 @@ def get_sheet_tabs():
         try: sheet_log.update_title("Logs")
         except: pass
     
-    # 헤더 복구
     try:
         current_headers = sheet_log.row_values(1)
         if not current_headers or current_headers[0] != "날짜":
@@ -87,8 +77,8 @@ def load_data():
     if len(rows) < 2: return pd.DataFrame(columns=HEADERS)
     
     df = pd.DataFrame(rows[1:], columns=HEADERS)
-    # 삭제를 위해 행 번호 저장
-    df['sheet_row_num'] = range(2, len(df) + 2)
+    # 삭제를 위해 행 번호 저장 (매우 중요)
+    df['_row_idx'] = range(2, len(df) + 2)
     
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
@@ -102,9 +92,12 @@ def save_data(entry):
     sheet_log.append_row(row)
     return True
 
-def delete_data(sheet_row_num):
+def delete_rows_by_indices(row_indices):
+    """여러 줄을 한꺼번에 삭제 (뒤에서부터 지워야 번호가 안 밀림)"""
     sheet_log, _ = get_sheet_tabs()
-    sheet_log.delete_rows(sheet_row_num)
+    # 내림차순 정렬 (큰 숫자부터 지워야 함)
+    for idx in sorted(row_indices, reverse=True):
+        sheet_log.delete_rows(idx)
 
 # --- 4. 설정 관리 ---
 def load_config():
@@ -141,7 +134,6 @@ st.title("🌊 My Triton Manager (Cloud)")
 if "config" not in st.session_state: st.session_state.config = load_config()
 cfg = st.session_state.config
 
-# 사이드바
 with st.sidebar:
     st.header("⚙️ 수조 & 목표 설정")
     volume = st.number_input("물량 (L)", value=float(cfg["volume"]), step=0.1)
@@ -163,7 +155,6 @@ with st.sidebar:
 
 st.success("✅ 구글 시트 연결됨")
 
-# 기록 입력창
 with st.expander("📝 새 기록 입력하기", expanded=False):
     with st.form("entry"):
         c1,c2,c3,c4 = st.columns(4)
@@ -177,7 +168,7 @@ with st.expander("📝 새 기록 입력하기", expanded=False):
         d_ph=c4.number_input("pH",value=t_ph,step=0.1)
         d_sal=c4.number_input("염도",value=35.0,step=0.1)
         d_temp=c4.number_input("온도",value=25.0,step=0.1)
-        d_memo=st.text_area("메모 (길게 써도 됩니다)")
+        d_memo=st.text_area("메모")
         if st.form_submit_button("저장 💾"):
             entry={"날짜":d_date,"KH":d_kh,"Ca":d_ca,"Mg":d_mg,"NO2":d_no2,"NO3":d_no3,"PO4":d_po4,"pH":d_ph,"Temp":d_temp,"Salinity":d_sal,"도징량":base_dose,"Memo":d_memo}
             if save_data(entry): st.toast("저장되었습니다!"); st.rerun()
@@ -193,7 +184,7 @@ if not df.empty:
         c1.plotly_chart(draw_radar(["KH","Ca","Mg"],[last["KH"],last["Ca"],last["Mg"]],[t_kh,t_ca,t_mg],"3요소","#00FFAA"), use_container_width=True)
         c2.plotly_chart(draw_radar(["NO2","NO3","PO4","pH"],[last["NO2"],last["NO3"],last["PO4"]*100,last["pH"]],[t_no2,t_no3,t_po4*100,t_ph],"영양염","#FF5500"), use_container_width=True)
     with g2:
-        st.subheader("🤖 AI 분석 (최신 기록)")
+        st.subheader("🤖 AI 분석")
         kh_diff = last["KH"] - t_kh
         vol_factor = volume / 100.0
         if abs(kh_diff) <= 0.15: st.info(f"✅ KH 완벽 ({last['KH']})")
@@ -206,38 +197,44 @@ if not df.empty:
 
     st.divider()
     
-    # [수정 완료] 다시 깔끔한 '전체 표(List)'로 복귀!
-    st.subheader("📋 전체 기록 (최신순)")
-    
-    # 1. 보기 편하게 메모가 있으면 아이콘으로 표시
+    # ---------------------------------------------------------
+    # [새로운 기능] 엑셀처럼 체크해서 삭제하기
+    # ---------------------------------------------------------
+    st.subheader("📋 전체 기록 관리 (체크 후 삭제)")
+
+    # 1. '삭제' 체크박스 컬럼 추가 (기본값 False)
     df_display = df.sort_values("날짜", ascending=False).copy()
-    
-    # 2. 메인 표 보여주기 (여기서 다 봅니다)
-    st.dataframe(
-        df_display[['날짜','KH','Ca','Mg','NO2','NO3','PO4','pH','Temp','Salinity','도징량','Memo']], 
-        use_container_width=True,
-        hide_index=True
+    df_display.insert(0, "삭제", False) # 맨 앞에 삭제 컬럼 추가
+
+    # 2. 엑셀처럼 편집 가능한 표 (data_editor)
+    edited_df = st.data_editor(
+        df_display,
+        column_config={
+            "삭제": st.column_config.CheckboxColumn(
+                "삭제 선택",
+                help="지우고 싶은 줄을 체크하세요",
+                default=False,
+            ),
+            "_row_idx": None, # 행 번호는 숨김
+        },
+        disabled=HEADERS, # 데이터는 수정 못하게 막음 (삭제만 가능)
+        hide_index=True,
+        use_container_width=True
     )
-    
-    # 3. 삭제 기능 (선택 상자로 깔끔하게)
-    st.markdown("### 🗑️ 기록 삭제")
-    col_del1, col_del2 = st.columns([3, 1])
-    with col_del1:
-        # 삭제할 기록을 선택하세요
-        del_target = st.selectbox(
-            "삭제할 기록 선택:", 
-            options=df_display.index, 
-            format_func=lambda i: f"[{df_display.loc[i,'날짜']}] KH: {df_display.loc[i,'KH']} (기록 #{i+1})",
-            label_visibility="collapsed"
-        )
-    with col_del2:
-        if st.button("삭제하기", type="primary"):
-            if del_target is not None:
-                # 선택된 행의 진짜 시트 행 번호를 가져와서 삭제
-                real_row_num = df_display.loc[del_target, 'sheet_row_num']
-                delete_data(real_row_num)
-                st.toast("삭제 완료! 새로고침 중...")
-                st.rerun()
+
+    # 3. 삭제 버튼
+    if st.button("🗑️ 선택한 기록 삭제하기", type="primary"):
+        # 체크된 행 찾기
+        rows_to_delete = edited_df[edited_df["삭제"] == True]
+        
+        if not rows_to_delete.empty:
+            # 구글 시트 행 번호 가져오기
+            indices = rows_to_delete["_row_idx"].tolist()
+            delete_rows_by_indices(indices)
+            st.toast(f"{len(indices)}개의 기록을 삭제했습니다!")
+            st.rerun()
+        else:
+            st.warning("먼저 표에서 지울 항목을 체크(☑️)해주세요.")
 
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
