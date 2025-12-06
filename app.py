@@ -10,8 +10,7 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# --- 1. 인증 (코드에 있는 키 사용) ---
-# 👇 선생님의 키를 여기에 붙여넣으셨죠? (그대로 두시면 됩니다)
+# 👇👇👇 [선생님의 키를 여기에 그대로 두세요!] 👇👇👇
 ROBOT_KEY = """
 {
   "type": "service_account",
@@ -27,26 +26,19 @@ ROBOT_KEY = """
   "universe_domain": "googleapis.com"
 }
 """
+# 👆👆👆 [아까 성공한 키를 그대로 넣어뒀습니다] 👆👆👆
 
+# --- 1. 인증 ---
 def get_creds():
     try:
-        # 키가 비어있는지 확인
-        if "project_id" not in ROBOT_KEY:
-            st.error("🚨 **코드 위쪽 'ROBOT_KEY' 부분에 JSON 내용을 붙여넣어 주세요!**")
-            st.stop()
+        if "project_id" not in ROBOT_KEY: st.error("🚨 키가 비어있습니다."); st.stop()
         return json.loads(ROBOT_KEY, strict=False)
     except json.JSONDecodeError as e:
-        st.error(f"🚨 키 형식 오류: {e}")
-        st.info("메모장에서 { 괄호부터 } 괄호까지 빠짐없이 복사했는지 확인해주세요.")
-        st.stop()
+        st.error(f"🚨 키 형식 오류: {e}"); st.stop()
 
 creds_dict = get_creds()
 
-# 🚨 [긴급 처방] 로봇 이메일 확인 및 초대 안내
-client_email = creds_dict.get("client_email", "확인 불가")
-st.info(f"📢 **[마지막 단계]** 아래 이메일을 복사해서 구글 시트에 **'편집자'**로 초대해주세요!\n\n👉 **{client_email}**")
-
-# --- 2. 구글 시트 연결 ---
+# --- 2. 구글 시트 연결 (주소 직접 입력 기능 추가) ---
 def get_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -54,16 +46,30 @@ def get_client():
 
 def get_sheet_tabs():
     client = get_client()
+    sh = None
+    
+    # 1차 시도: 이름으로 찾기
     try: 
         sh = client.open(SHEET_NAME)
-    except Exception as e:
-        st.error(f"🚨 **구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다!**")
-        st.markdown(f"""
-        **체크리스트:**
-        1. 구글 시트 제목이 띄어쓰기 없이 정확히 **`{SHEET_NAME}`** 인가요?
-        2. 위 파란 박스에 있는 **{client_email}** 주소를 시트 [공유] 버튼 눌러서 추가했나요?
-        """)
-        st.stop()
+    except: 
+        pass # 실패하면 2차 시도로 넘어감
+
+    # 2차 시도: 주소(URL)로 찾기 (화면에서 입력받음)
+    if sh is None:
+        st.warning(f"⚠️ '{SHEET_NAME}' 파일을 이름으로 못 찾았습니다.")
+        st.info("👇 구글 시트 인터넷 주소(URL)를 복사해서 아래 칸에 붙여넣고 엔터를 치세요!")
+        
+        sheet_url = st.text_input("구글 시트 URL 붙여넣기:", key="sheet_url_input")
+        
+        if sheet_url:
+            try:
+                sh = client.open_by_url(sheet_url)
+                st.success("✅ 주소로 연결 성공! (잠시 후 화면이 바뀝니다)")
+            except Exception as e:
+                st.error(f"🚨 연결 실패. 공유가 안 된 것 같습니다.\n\n로봇 이메일: **{creds_dict['client_email']}**\n이 주소를 시트에 '편집자'로 초대했는지 꼭 확인하세요!")
+                st.stop()
+        else:
+            st.stop()
 
     sheet_log = sh.sheet1
     if sheet_log.title != "Logs": 
@@ -85,14 +91,11 @@ def load_data():
     sheet_log, _ = get_sheet_tabs()
     rows = sheet_log.get_all_values()
     if len(rows) < 2: return pd.DataFrame(columns=HEADERS)
-    
     df = pd.DataFrame(rows[1:], columns=HEADERS)
     df['_row_idx'] = range(2, len(df) + 2)
-    
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+        if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
     return df
 
 def save_data(entry):
@@ -103,8 +106,7 @@ def save_data(entry):
 
 def delete_rows_by_indices(row_indices):
     sheet_log, _ = get_sheet_tabs()
-    for idx in sorted(row_indices, reverse=True):
-        sheet_log.delete_rows(idx)
+    for idx in sorted(row_indices, reverse=True): sheet_log.delete_rows(idx)
 
 # --- 4. 설정 관리 ---
 def load_config():
@@ -153,7 +155,6 @@ with st.sidebar:
     t_no3 = st.number_input("목표 NO3", value=float(cfg["t_no3"]), step=0.1)
     t_po4 = st.number_input("목표 PO4", value=float(cfg["t_po4"]), format="%.3f", step=0.01)
     t_ph = st.number_input("목표 pH", value=float(cfg["t_ph"]), step=0.1)
-    
     if st.button("💾 설정값 영구 저장"):
         new_conf = {"volume":volume, "base_dose":base_dose, "t_kh":t_kh, "t_ca":t_ca, "t_mg":t_mg, "t_no2":t_no2, "t_no3":t_no3, "t_po4":t_po4, "t_ph":t_ph}
         save_config(new_conf)
@@ -165,8 +166,7 @@ st.success("✅ 구글 시트 연결됨")
 with st.expander("📝 새 기록 입력하기", expanded=False):
     with st.form("entry"):
         c1,c2,c3,c4 = st.columns(4)
-        d_date=c1.date_input("날짜",date.today())
-        d_kh=c1.number_input("KH",value=t_kh,step=0.01)
+        d_date=c1.date_input("날짜",date.today()); d_kh=c1.number_input("KH",value=t_kh,step=0.01)
         d_ca=c2.number_input("Ca",value=t_ca,step=10); d_mg=c2.number_input("Mg",value=t_mg,step=10)
         d_no2=c3.number_input("NO2",value=0.0,format="%.3f",step=0.001); d_no3=c3.number_input("NO3",value=t_no3,step=0.1); d_po4=c3.number_input("PO4",value=t_po4,format="%.3f",step=0.01)
         d_ph=c4.number_input("pH",value=t_ph,step=0.1); d_sal=c4.number_input("염도",value=35.0,step=0.1); d_temp=c4.number_input("온도",value=25.0,step=0.1)
@@ -202,6 +202,7 @@ if not df.empty:
     df_display = df.sort_values("날짜", ascending=False).copy()
     df_display.insert(0, "삭제", False)
     
+    # 메모 내용을 표 안에 바로 표시
     df_display['Memo'] = df_display['Memo'].apply(lambda x: str(x) if x else "")
 
     edited_df = st.data_editor(
@@ -223,4 +224,3 @@ if not df.empty:
             st.warning("먼저 표에서 지울 항목을 체크해주세요.")
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
-
