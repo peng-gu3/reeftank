@@ -1,16 +1,4 @@
 import streamlit as st
-import json
-import re
-
-st.set_page_config(page_title="앱 생성기 V2", layout="wide")
-st.title("🤖 최종 앱 코드 생성기 (강력 청소 버전)")
-st.info("아래 칸에 로봇 열쇠(JSON) 내용을 붙여넣고 버튼을 누르세요.")
-
-# 1. 키 입력 받기
-key_input = st.text_area("여기에 키 붙여넣기", height=300)
-
-# 2. 진짜 앱 코드 템플릿
-FINAL_APP_CODE = r'''import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import date
@@ -24,7 +12,19 @@ HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도
 
 # ▼▼▼ 선생님의 키가 여기에 자동으로 들어갑니다 ▼▼▼
 ROBOT_KEY = """
-__KEY_HERE__
+{
+  "type": "service_account",
+  "project_id": "reef-e23b5",
+  "private_key_id": "b3a4d11962e6b31a469f1e26a50aa7e8e85ad1a7",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDOYfNgbwJskSq8\nR23lxBP2JzARFG4myiXkJ6uVA/tuHrTcIrw2SFmKcle5/AeXXc7KMLvHf+VNfMXW\nxeglERw5EL3eHe1UX1ByUGVnWHz8pypsjIdo8LdtRHldgzrz7mrlK1BGnCp+2iqL\n7fo2bnasCug/WoDir2khYZcYMKETF3jQ7YbiRgNWGkXimBrjQtSld4KV0fi2e8PM\nKFmd6Zzw6tIu7VvUAdGmp0fDiLp8Xv3DWIEVarmb40p4CIWXW/4Lc3ZlhXDLe3fI\nRUZCWFHGeNoHtfTBlhAlDZoUkFc2OFsibrcUk2gHvGj7fOeFHGcYFBFwG2JR7Spl\nwXBkFd1tAgMBAAECggEAGdVp/RK4N3XOZyX7zCyIoSHTovevOBzKtG4AzNTkRqsC\nUaHpdFQHHUzlzUqOerSL24RRJQ5N2i65pwI75lPnd/8v/Rs653pM3BpTLyYE8y1L\noq3Oj2S+WSeel4WDPiCEce5DjKskqJ9PfxeJYAHgyfVNkAyYoId7fem025rOttBa\nS/gmDtLPy526xnbsCdWycmIDMQWp/a7l2ELaMf9FikfpjKUL0bNqhcRGZElcSCYU\nQGHmaoK8DnpNox3rmbu37Lb42ppGislhpv12f5WshWYswPlBPrXUo26u7gLgDtcT\n5BRVTfBqaeYv4Co76TKtp9bGgLuonc2LFOh2zVEDcwKBgQDnO32EEn78RR8utMNy\nUTkMxI9fvjkspr/mrTaeFK3kPhm/JQG7D9w2t9KweU+6g6Qt5WeaEq15349ALdCI\nGGBhdntix8hlGmwWoW7ckUa0J5L3lIgPmQmXYWRa6WiH74H31rQrTxP8UUfxeVhQ\nOEYD2OAoTZs52x/iFQhhGJUFOwKBgQDkfRE0qhWd31y49iMYW89inKj88PDYUI11\nkuJ9XMf2AF2V5m+dn0z3AEfwkaVQf7dp4uXokuQ9L4vBWRIxVx9idmPkUiMt1EtU\nGI6flVI1j7XGhAfFHFhAvbDRjP41rDDVcXMyV3U0j8GRmfModTcpo8RSgJEPmAwO\nrdM8NR5ddwKBgQCm1n+rqYTCFEV5d6eFdiFJmxEvrZqnIvFXSScdTCJjioMdLWBg\nTgM/38Y+2miyVIVDMEBeJJfSVYGQdv39FEmGSOyhyzBF8piGg5fvwUpYdi1OQXci\nefM3rGeySLLJUgBeiCWbEgWDikn0au9TgibSY8roiYY0amxIvZA8LnZnPQKBgFIV\nfDDnSYzFyZHJGyKNGRvcG/mCtYOArNEoS6Wtx0hhKT3I4yBFMmkp+K48JJ+ewk2P\n7fh3jPdONW7oiNig6+17irdjqq+0LLuxdstt4XLMhgkjNYdif3ICs5sUg97UVVbY\nwwG62ahgXLHqFKjcM00KQGVDOtnXTb2YROLEUnxRAoGAJRe67TQdzfDYcxdX2JAx\nF+5o5jV4PyUmX7dHxcZHQfwEGUxBnw1OzRRbT4ZSZMYqsr4LSXaUCQVMhkDbvPmn\nLxcErtRpbjKWpf89PQzNGIrYujhMzODJAOBGTPuHDe4hCWu6sPyizBNzHAwgcolB\nv3CSENcbP/a4ZqDfs/GeGVE=\n-----END PRIVATE KEY-----\n",
+  "client_email": "reef-bot@reef-e23b5.iam.gserviceaccount.com",
+  "client_id": "101105675500933645721",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/reef-bot%40reef-e23b5.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
 """
 # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
@@ -200,27 +200,3 @@ if not df.empty:
             st.warning("먼저 표에서 지울 항목을 체크해주세요.")
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
-'''
-
-if st.button("🚀 내 전용 앱 코드 만들기 (클릭)"):
-    if not key_input.strip():
-        st.error("⚠️ 키 내용을 먼저 붙여넣어 주세요!")
-    else:
-        try:
-            # [강력 청소 기능]
-            # 1. 눈에 안 보이는 제어 문자 제거
-            cleaned_key = "".join(ch for ch in key_input if ch.isprintable() or ch in ['\n', '\r', '\t'])
-            # 2. JSON 파싱 시도 (strict=False로 조금 더 관대하게)
-            json_obj = json.loads(cleaned_key, strict=False)
-            
-            # 3. 다시 깨끗한 문자열로 변환
-            clean_json_str = json.dumps(json_obj, indent=2)
-            
-            # 4. 코드 생성
-            final_code = FINAL_APP_CODE.replace("__KEY_HERE__", clean_json_str)
-            
-            st.success("🎉 성공! 아래 코드를 복사해서 app.py에 덮어씌우세요.")
-            st.code(final_code, language="python")
-        except Exception as e:
-            st.error(f"🚨 아직도 형식이 안 맞습니다. 에러 내용: {e}")
-            st.info("메모장에서 { 괄호부터 } 괄호까지 정확하게 복사했는지 다시 확인해주세요.")
