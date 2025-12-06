@@ -48,40 +48,28 @@ def get_sheet_tabs():
     try: sh = client.open(SHEET_NAME)
     except: st.error(f"🚨 구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다."); st.stop()
 
-    # [핵심 수정] 시트가 꼬였을 때 자동 복구하는 기능
     sheet_log = sh.sheet1
     if sheet_log.title != "Logs": 
         try: sheet_log.update_title("Logs")
         except: pass
     
-    # 헤더 강제 복구 (KeyError 방지)
+    # [시트 복구 기능] 첫 줄이 비었거나 깨졌으면 헤더 강제 주입
     try:
         current_headers = sheet_log.row_values(1)
         if not current_headers or current_headers[0] != "날짜":
-            # 첫 줄이 비었거나 이상하면 헤더를 강제로 넣음
             sheet_log.insert_row(HEADERS, index=1)
-    except:
-        pass
+    except: pass
 
     try: sheet_config = sh.worksheet("Config")
     except: sheet_config = sh.add_worksheet(title="Config", rows=20, cols=5)
-    
     return sheet_log, sheet_config
 
-# --- 3. 데이터 읽기/쓰기 (안전장치 강화) ---
+# --- 3. 데이터 읽기/쓰기 ---
 def load_data():
     sheet_log, _ = get_sheet_tabs()
     rows = sheet_log.get_all_values()
-    
-    # 데이터가 없거나 헤더만 있는 경우
-    if len(rows) < 2:
-        return pd.DataFrame(columns=HEADERS)
-    
-    # 첫 줄을 헤더로, 나머지를 데이터로
-    # (만약 헤더가 꼬여도 강제로 표준 헤더 사용)
+    if len(rows) < 2: return pd.DataFrame(columns=HEADERS)
     df = pd.DataFrame(rows[1:], columns=HEADERS)
-    
-    # 숫자 변환
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
         if c in df.columns:
@@ -111,7 +99,33 @@ def save_config(new_conf):
     sheet_config.append_row(list(new_conf.keys()))
     sheet_config.append_row(list(new_conf.values()))
 
-# --- 5. 메인 화면 ---
+# --- 5. 그래프 그리기 (수정됨: 에러 원인 제거) ---
+def draw_radar(cats, vals, t_vals, title, color):
+    norm_vals = []; txt_vals = []
+    for v, t in zip(vals, t_vals):
+        txt_vals.append(f"{v}"); norm_vals.append(v/t if t>0.01 and v<=t else (1+(v-t)*50 if t<=0.01 else v/t))
+    cats=[*cats,cats[0]]; norm_vals=[*norm_vals,norm_vals[0]]; txt_vals=[*txt_vals,""]
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(r=[1]*len(cats), theta=cats, line_color="white", line_dash='dot', name='목표'))
+    # textfont에서 weight 제거 (안전하게)
+    fig.add_trace(go.Scatterpolar(r=norm_vals, theta=cats, fill='toself', line_color=color, mode='lines+markers+text', text=txt_vals, textfont=dict(color=color)))
+    
+    # layout에서 angularaxis 속성 표준화 (weight 제거)
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(visible=False, range=[0,1.5]), 
+            angularaxis=dict(tickfont=dict(color="#00BFFF", size=12)), # 안전한 설정
+            bgcolor="rgba(0,0,0,0)"
+        ), 
+        paper_bgcolor="rgba(0,0,0,0)", 
+        font=dict(color="#00BFFF"), 
+        height=350, 
+        margin=dict(t=40,b=40)
+    )
+    return fig
+
+# --- 6. 메인 화면 ---
 st.title("🌊 My Triton Manager (Cloud)")
 
 if "config" not in st.session_state: st.session_state.config = load_config()
@@ -161,18 +175,6 @@ df = load_data()
 
 if not df.empty:
     last = df.iloc[-1]
-    
-    def draw_radar(cats, vals, t_vals, title, color):
-        norm_vals = []; txt_vals = []
-        for v, t in zip(vals, t_vals):
-            txt_vals.append(f"{v}"); norm_vals.append(v/t if t>0.01 and v<=t else (1+(v-t)*50 if t<=0.01 else v/t))
-        cats=[*cats,cats[0]]; norm_vals=[*norm_vals,norm_vals[0]]; txt_vals=[*txt_vals,""]
-        fig = go.Figure()
-        fig.add_trace(go.Scatterpolar(r=[1]*len(cats), theta=cats, line_color="white", line_dash='dot', name='목표'))
-        fig.add_trace(go.Scatterpolar(r=norm_vals, theta=cats, fill='toself', line_color=color, mode='lines+markers+text', text=txt_vals, textfont=dict(color=color, weight="bold")))
-        fig.update_layout(polar=dict(radialaxis=dict(visible=False, range=[0,1.5]), angularaxis=dict(color="#00BFFF", weight="bold"), bgcolor="rgba(0,0,0,0)"), paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#00BFFF"), height=350, margin=dict(t=40,b=40))
-        return fig
-
     g1,g2 = st.columns([1.2, 0.8])
     with g1:
         c1,c2 = st.columns(2)
@@ -184,8 +186,12 @@ if not df.empty:
         kh_diff = last["KH"] - t_kh
         vol_factor = volume / 100.0
         if abs(kh_diff) <= 0.15: st.info(f"✅ KH 완벽 ({last['KH']})")
-        elif kh_diff < 0: st.error(f"📉 KH 부족. 추천: {base_dose+0.3*vol_factor:.2f}ml")
-        else: st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-0.3*vol_factor):.2f}ml")
+        elif kh_diff < 0: 
+            add = 0.3 * vol_factor
+            st.error(f"📉 KH 부족. 추천: {base_dose+add:.2f}ml (현재 {base_dose}ml)")
+        else: 
+            sub = 0.3 * vol_factor
+            st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml (현재 {base_dose}ml)")
 
     st.subheader("📋 전체 기록 (Logs)")
     st.dataframe(df.sort_values("날짜", ascending=False), use_container_width=True)
