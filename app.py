@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import date, timedelta
+from datetime import date
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
@@ -10,32 +10,48 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# --- 1. 인증 및 연결 ---
+# --- 1. 인증 및 연결 (가장 튼튼한 버전) ---
 def get_creds():
+    # 1순위: Secrets 확인 (형식이 조금 틀려도 최대한 읽어보려 노력함)
     if "gcp_service_account" in st.secrets:
         try:
             secrets_data = st.secrets["gcp_service_account"]
-            if "info" in secrets_data: return json.loads(secrets_data["info"])
-            else: return dict(secrets_data)
-        except: pass
-    if "uploaded_creds" in st.session_state: return st.session_state.uploaded_creds
+            # info = """...""" 형태로 저장된 경우
+            if "info" in secrets_data:
+                return json.loads(secrets_data["info"])
+            # 그냥 내용이 바로 저장된 경우
+            else:
+                return dict(secrets_data)
+        except:
+            pass # Secrets가 이상하면 무시하고 다음 단계(파일 업로드)로 넘어감
+
+    # 2순위: 이미 업로드한 파일이 있는지 확인 (새로고침 해도 유지되게)
+    if "uploaded_creds" in st.session_state:
+        return st.session_state.uploaded_creds
+        
     return None
 
 creds_dict = get_creds()
 
+# 인증 파일 없으면 업로더 표시
 if creds_dict is None:
     st.warning("⚠️ **로봇 열쇠 파일(JSON)**을 업로드해주세요.")
-    uploaded_file = st.file_uploader("JSON 파일 드래그 & 드롭", type="json", key="auth")
+    # key를 고정해서 에러 방지
+    uploaded_file = st.file_uploader("JSON 파일 드래그 & 드롭", type="json", key="auth_file")
+    
     if uploaded_file:
         try:
             creds = json.load(uploaded_file)
             if "client_email" in creds:
+                # [핵심] 업로드한 열쇠를 앱이 기억하게 저장
                 st.session_state.uploaded_creds = creds
-                st.success("✅ 인증 성공! (새로고침 중...)")
+                st.success("✅ 인증 성공! (잠시만 기다리세요...)")
                 st.rerun()
-            else: st.error("🚨 올바른 키 파일이 아닙니다.")
-        except: st.error("🚨 파일 읽기 오류")
-    st.stop()
+            else: 
+                st.error("🚨 올바른 키 파일이 아닙니다.")
+        except: 
+            st.error("🚨 파일 읽기 오류")
+    st.stop() # 인증 전에는 아래 코드 실행 막기
 
 # --- 2. 구글 시트 연결 ---
 def get_client():
@@ -53,6 +69,7 @@ def get_sheet_tabs():
         try: sheet_log.update_title("Logs")
         except: pass
     
+    # 헤더 복구
     try:
         current_headers = sheet_log.row_values(1)
         if not current_headers or current_headers[0] != "날짜":
@@ -69,20 +86,14 @@ def load_data():
     rows = sheet_log.get_all_values()
     if len(rows) < 2: return pd.DataFrame(columns=HEADERS)
     
-    # 데이터프레임 생성
     df = pd.DataFrame(rows[1:], columns=HEADERS)
-    
-    # [중요] 삭제를 위해 구글 시트의 실제 행 번호(Row Number)를 추적합니다.
-    # 헤더가 1행이므로, 데이터는 2행부터 시작 (index 0 -> row 2)
+    # 삭제를 위해 행 번호 저장
     df['sheet_row_num'] = range(2, len(df) + 2)
     
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-    
-    # 날짜 형식 변환 (필터링을 위해)
-    df['날짜'] = pd.to_datetime(df['날짜']).dt.date
     return df
 
 def save_data(entry):
@@ -92,7 +103,6 @@ def save_data(entry):
     return True
 
 def delete_data(sheet_row_num):
-    """구글 시트의 특정 행 번호를 삭제합니다."""
     sheet_log, _ = get_sheet_tabs()
     sheet_log.delete_rows(sheet_row_num)
 
@@ -153,6 +163,7 @@ with st.sidebar:
 
 st.success("✅ 구글 시트 연결됨")
 
+# 기록 입력창
 with st.expander("📝 새 기록 입력하기", expanded=False):
     with st.form("entry"):
         c1,c2,c3,c4 = st.columns(4)
@@ -166,7 +177,7 @@ with st.expander("📝 새 기록 입력하기", expanded=False):
         d_ph=c4.number_input("pH",value=t_ph,step=0.1)
         d_sal=c4.number_input("염도",value=35.0,step=0.1)
         d_temp=c4.number_input("온도",value=25.0,step=0.1)
-        d_memo=st.text_area("메모")
+        d_memo=st.text_area("메모 (길게 써도 됩니다)")
         if st.form_submit_button("저장 💾"):
             entry={"날짜":d_date,"KH":d_kh,"Ca":d_ca,"Mg":d_mg,"NO2":d_no2,"NO3":d_no3,"PO4":d_po4,"pH":d_ph,"Temp":d_temp,"Salinity":d_sal,"도징량":base_dose,"Memo":d_memo}
             if save_data(entry): st.toast("저장되었습니다!"); st.rerun()
@@ -182,7 +193,7 @@ if not df.empty:
         c1.plotly_chart(draw_radar(["KH","Ca","Mg"],[last["KH"],last["Ca"],last["Mg"]],[t_kh,t_ca,t_mg],"3요소","#00FFAA"), use_container_width=True)
         c2.plotly_chart(draw_radar(["NO2","NO3","PO4","pH"],[last["NO2"],last["NO3"],last["PO4"]*100,last["pH"]],[t_no2,t_no3,t_po4*100,t_ph],"영양염","#FF5500"), use_container_width=True)
     with g2:
-        st.subheader("🤖 AI 분석")
+        st.subheader("🤖 AI 분석 (최신 기록)")
         kh_diff = last["KH"] - t_kh
         vol_factor = volume / 100.0
         if abs(kh_diff) <= 0.15: st.info(f"✅ KH 완벽 ({last['KH']})")
@@ -195,64 +206,38 @@ if not df.empty:
 
     st.divider()
     
-    # ---------------------------------------------------------
-    # [수정된 부분] 목록 UI 개선: 최근 7일 보기 + 펼치기 + 바로 삭제
-    # ---------------------------------------------------------
-    st.subheader("📋 기록 목록")
+    # [수정 완료] 다시 깔끔한 '전체 표(List)'로 복귀!
+    st.subheader("📋 전체 기록 (최신순)")
     
-    # 1. 보기 모드 선택 (최근 7일 vs 전체 검색)
-    col_filter, col_empty = st.columns([2, 3])
-    with col_filter:
-        view_mode = st.radio("보기 옵션", ["최근 7일만 보기", "🔍 전체 기록 검색/보기"], horizontal=True)
+    # 1. 보기 편하게 메모가 있으면 아이콘으로 표시
+    df_display = df.sort_values("날짜", ascending=False).copy()
     
-    # 2. 데이터 필터링
-    df_sorted = df.sort_values("날짜", ascending=False) # 최신순 정렬
+    # 2. 메인 표 보여주기 (여기서 다 봅니다)
+    st.dataframe(
+        df_display[['날짜','KH','Ca','Mg','NO2','NO3','PO4','pH','Temp','Salinity','도징량','Memo']], 
+        use_container_width=True,
+        hide_index=True
+    )
     
-    if view_mode == "최근 7일만 보기":
-        seven_days_ago = date.today() - timedelta(days=7)
-        filtered_df = df_sorted[df_sorted["날짜"] >= seven_days_ago]
-    else:
-        # 검색 기능 (날짜 선택 또는 전체)
-        search_date = st.date_input("날짜로 검색 (선택 안 하면 전체)", value=None)
-        if search_date:
-            filtered_df = df_sorted[df_sorted["날짜"] == search_date]
-        else:
-            filtered_df = df_sorted # 전체 보기
-
-    # 3. 리스트 출력 (Expander 사용)
-    if filtered_df.empty:
-        st.info("해당 기간의 기록이 없습니다.")
-    else:
-        for index, row in filtered_df.iterrows():
-            # 라벨 만들기 (날짜 | KH | 메모아이콘)
-            memo_icon = "📝" if row['Memo'] and str(row['Memo']).strip() != "" else ""
-            label_text = f"📅 {row['날짜']}  |  🧪 KH: {row['KH']}  |  💧 도징: {row['도징량']}ml  {memo_icon}"
-            
-            # 카드(Expander) 생성
-            with st.expander(label_text):
-                c_info, c_del = st.columns([4, 1])
-                
-                with c_info:
-                    # 상세 수치 보여주기
-                    st.markdown(f"""
-                    - **주요 3요소:** Ca {row['Ca']} / Mg {row['Mg']}
-                    - **영양염:** NO3 {row['NO3']} / PO4 {row['PO4']} / NO2 {row['NO2']}
-                    - **환경:** 염도 {row['Salinity']}ppt / 온도 {row['Temp']}°C / pH {row['pH']}
-                    """)
-                    
-                    # 메모가 있으면 보여주기
-                    if row['Memo'] and str(row['Memo']).strip() != "":
-                        st.info(f"**📝 메모:**\n{row['Memo']}")
-                    else:
-                        st.caption("(메모 없음)")
-                
-                with c_del:
-                    st.write("") # 줄바꿈
-                    # 바로 삭제 버튼 ( sheet_row_num 사용 )
-                    if st.button("🗑️ 삭제", key=f"del_{row['sheet_row_num']}", type="primary"):
-                        delete_data(row['sheet_row_num'])
-                        st.toast("삭제되었습니다! (새로고침 중...)")
-                        st.rerun()
+    # 3. 삭제 기능 (선택 상자로 깔끔하게)
+    st.markdown("### 🗑️ 기록 삭제")
+    col_del1, col_del2 = st.columns([3, 1])
+    with col_del1:
+        # 삭제할 기록을 선택하세요
+        del_target = st.selectbox(
+            "삭제할 기록 선택:", 
+            options=df_display.index, 
+            format_func=lambda i: f"[{df_display.loc[i,'날짜']}] KH: {df_display.loc[i,'KH']} (기록 #{i+1})",
+            label_visibility="collapsed"
+        )
+    with col_del2:
+        if st.button("삭제하기", type="primary"):
+            if del_target is not None:
+                # 선택된 행의 진짜 시트 행 번호를 가져와서 삭제
+                real_row_num = df_display.loc[del_target, 'sheet_row_num']
+                delete_data(real_row_num)
+                st.toast("삭제 완료! 새로고침 중...")
+                st.rerun()
 
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
