@@ -8,26 +8,21 @@ import json
 
 st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wide")
 SHEET_NAME = "MyReefLog"
+HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# --- 1. 인증 및 연결 (파일 업로드 방식 유지) ---
+# --- 1. 인증 및 연결 ---
 def get_creds():
-    # Secrets 먼저 확인
     if "gcp_service_account" in st.secrets:
         try:
             secrets_data = st.secrets["gcp_service_account"]
-            if "info" in secrets_data:
-                return json.loads(secrets_data["info"])
-            else:
-                return dict(secrets_data)
+            if "info" in secrets_data: return json.loads(secrets_data["info"])
+            else: return dict(secrets_data)
         except: pass
-    # 업로드된 파일 확인
-    if "uploaded_creds" in st.session_state:
-        return st.session_state.uploaded_creds
+    if "uploaded_creds" in st.session_state: return st.session_state.uploaded_creds
     return None
 
 creds_dict = get_creds()
 
-# 인증 파일 없으면 업로더 표시
 if creds_dict is None:
     st.warning("⚠️ **로봇 열쇠 파일(JSON)**을 업로드해주세요.")
     uploaded_file = st.file_uploader("JSON 파일 드래그 & 드롭", type="json", key="auth")
@@ -42,111 +37,91 @@ if creds_dict is None:
         except: st.error("🚨 파일 읽기 오류")
     st.stop()
 
-# --- 2. 구글 시트 연결 및 탭 관리 ---
+# --- 2. 구글 시트 연결 ---
 def get_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     return gspread.authorize(creds)
 
 def get_sheet_tabs():
-    """데이터용(Logs) 탭과 설정용(Config) 탭을 가져옵니다."""
     client = get_client()
-    try:
-        sh = client.open(SHEET_NAME)
-    except:
-        st.error(f"🚨 구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다. 이름이 정확한지 확인하세요!")
-        st.stop()
+    try: sh = client.open(SHEET_NAME)
+    except: st.error(f"🚨 구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다."); st.stop()
 
-    # 1. 로그 시트 (첫 번째 시트)
+    # [핵심 수정] 시트가 꼬였을 때 자동 복구하는 기능
     sheet_log = sh.sheet1
-    if sheet_log.title != "Logs":
+    if sheet_log.title != "Logs": 
         try: sheet_log.update_title("Logs")
         except: pass
-
-    # 2. 설정 시트 (없으면 생성)
+    
+    # 헤더 강제 복구 (KeyError 방지)
     try:
-        sheet_config = sh.worksheet("Config")
+        current_headers = sheet_log.row_values(1)
+        if not current_headers or current_headers[0] != "날짜":
+            # 첫 줄이 비었거나 이상하면 헤더를 강제로 넣음
+            sheet_log.insert_row(HEADERS, index=1)
     except:
-        sheet_config = sh.add_worksheet(title="Config", rows=20, cols=5)
+        pass
+
+    try: sheet_config = sh.worksheet("Config")
+    except: sheet_config = sh.add_worksheet(title="Config", rows=20, cols=5)
     
     return sheet_log, sheet_config
 
-# --- 3. 데이터 읽기/쓰기 (가장 튼튼한 방식) ---
+# --- 3. 데이터 읽기/쓰기 (안전장치 강화) ---
 def load_data():
     sheet_log, _ = get_sheet_tabs()
-    # get_all_values로 날것의 데이터를 가져옴 (에러 방지)
     rows = sheet_log.get_all_values()
     
-    if len(rows) < 2: # 헤더만 있거나 비어있으면 빈 데이터프레임
-        return pd.DataFrame(columns=["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"])
+    # 데이터가 없거나 헤더만 있는 경우
+    if len(rows) < 2:
+        return pd.DataFrame(columns=HEADERS)
     
-    # 첫 줄을 헤더로 사용
-    header = rows[0]
-    data = rows[1:]
-    df = pd.DataFrame(data, columns=header)
+    # 첫 줄을 헤더로, 나머지를 데이터로
+    # (만약 헤더가 꼬여도 강제로 표준 헤더 사용)
+    df = pd.DataFrame(rows[1:], columns=HEADERS)
     
-    # 숫자 변환 (문자로 저장된 걸 숫자로)
+    # 숫자 변환
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-            
     return df
 
 def save_data(entry):
     sheet_log, _ = get_sheet_tabs()
-    # 헤더가 없으면 먼저 씀
-    if len(sheet_log.get_all_values()) == 0:
-        sheet_log.append_row(["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"])
-    
     row = [str(entry["날짜"]), entry["KH"], entry["Ca"], entry["Mg"], entry["NO2"], entry["NO3"], entry["PO4"], entry["pH"], entry["Temp"], entry["Salinity"], entry["도징량"], entry["Memo"]]
     sheet_log.append_row(row)
     return True
 
-# --- 4. 설정값(목표치) 읽기/쓰기 (Config 탭 사용) ---
+# --- 4. 설정 읽기/쓰기 ---
 def load_config():
     _, sheet_config = get_sheet_tabs()
     records = sheet_config.get_all_records()
-    
-    # 기본값
     default = {"volume":150.0,"base_dose":3.00,"t_kh":8.30,"t_ca":420,"t_mg":1420,"t_no2":0.010,"t_no3":5.00,"t_po4":0.040,"t_ph":8.30}
-    
-    if not records:
-        return default
-    
-    # 저장된 설정이 있으면 가져오기 (첫번째 줄)
+    if not records: return default
     saved = records[0]
-    # 누락된 키가 있으면 기본값으로 채움
     for k, v in default.items():
         if k not in saved: saved[k] = v
     return saved
 
 def save_config(new_conf):
     _, sheet_config = get_sheet_tabs()
-    sheet_config.clear() # 기존 설정 지우기
-    # 헤더 쓰기
-    keys = list(new_conf.keys())
-    sheet_config.append_row(keys)
-    # 값 쓰기
-    vals = list(new_conf.values())
-    sheet_config.append_row(vals)
+    sheet_config.clear()
+    sheet_config.append_row(list(new_conf.keys()))
+    sheet_config.append_row(list(new_conf.values()))
 
-# --- 5. 앱 화면 시작 ---
+# --- 5. 메인 화면 ---
 st.title("🌊 My Triton Manager (Cloud)")
 
-# 설정 불러오기
-if "config" not in st.session_state:
-    st.session_state.config = load_config()
-
+if "config" not in st.session_state: st.session_state.config = load_config()
 cfg = st.session_state.config
 
-# 사이드바 (설정)
 with st.sidebar:
     st.header("⚙️ 수조 & 목표 설정")
     volume = st.number_input("물량 (L)", value=float(cfg["volume"]), step=0.1)
     base_dose = st.number_input("도징량 (ml)", value=float(cfg["base_dose"]), step=0.01)
-    st.divider()
-    st.subheader("🎯 목표치")
+    st.divider(); st.subheader("🎯 목표치")
     t_kh = st.number_input("목표 KH", value=float(cfg["t_kh"]), step=0.01)
     t_ca = st.number_input("목표 Ca", value=int(cfg["t_ca"]), step=10)
     t_mg = st.number_input("목표 Mg", value=int(cfg["t_mg"]), step=10)
@@ -159,10 +134,8 @@ with st.sidebar:
         new_conf = {"volume":volume, "base_dose":base_dose, "t_kh":t_kh, "t_ca":t_ca, "t_mg":t_mg, "t_no2":t_no2, "t_no3":t_no3, "t_po4":t_po4, "t_ph":t_ph}
         save_config(new_conf)
         st.session_state.config = new_conf
-        st.toast("설정이 구글 시트에 저장되었습니다!")
-        st.rerun()
+        st.toast("설정 저장 완료!"); st.rerun()
 
-# 메인 입력 화면
 st.success("✅ 구글 시트 연결됨")
 
 with st.expander("📝 기록 입력", expanded=True):
@@ -179,29 +152,20 @@ with st.expander("📝 기록 입력", expanded=True):
         d_sal=c4.number_input("염도",value=35.0,step=0.1)
         d_temp=c4.number_input("온도",value=25.0,step=0.1)
         d_memo=st.text_area("메모")
-        
         if st.form_submit_button("저장 💾"):
             entry={"날짜":d_date,"KH":d_kh,"Ca":d_ca,"Mg":d_mg,"NO2":d_no2,"NO3":d_no3,"PO4":d_po4,"pH":d_ph,"Temp":d_temp,"Salinity":d_sal,"도징량":base_dose,"Memo":d_memo}
-            if save_data(entry): 
-                st.toast("저장되었습니다!")
-                st.rerun()
+            if save_data(entry): st.toast("저장되었습니다!"); st.rerun()
 
-# 데이터 시각화
 st.divider()
 df = load_data()
 
 if not df.empty:
-    # 데이터가 있을 때만 그래프 그림
     last = df.iloc[-1]
     
-    # 그래프 함수 (레이더)
     def draw_radar(cats, vals, t_vals, title, color):
-        norm_vals = []
-        txt_vals = []
+        norm_vals = []; txt_vals = []
         for v, t in zip(vals, t_vals):
-            txt_vals.append(f"{v}")
-            if t <= 0.01: norm_vals.append(v/t if t>0 and v<=t else (1+(v-t)*50))
-            else: norm_vals.append(v/t)
+            txt_vals.append(f"{v}"); norm_vals.append(v/t if t>0.01 and v<=t else (1+(v-t)*50 if t<=0.01 else v/t))
         cats=[*cats,cats[0]]; norm_vals=[*norm_vals,norm_vals[0]]; txt_vals=[*txt_vals,""]
         fig = go.Figure()
         fig.add_trace(go.Scatterpolar(r=[1]*len(cats), theta=cats, line_color="white", line_dash='dot', name='목표'))
@@ -218,19 +182,12 @@ if not df.empty:
     with g2:
         st.subheader("🤖 AI 분석")
         kh_diff = last["KH"] - t_kh
-        
-        # 150L 기준 보정 로직
         vol_factor = volume / 100.0
-        
         if abs(kh_diff) <= 0.15: st.info(f"✅ KH 완벽 ({last['KH']})")
-        elif kh_diff < 0: 
-            add = 0.3 * vol_factor
-            st.error(f"📉 KH 부족. 추천: {base_dose+add:.2f}ml (현재 {base_dose}ml)")
-        else: 
-            sub = 0.3 * vol_factor
-            st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml (현재 {base_dose}ml)")
+        elif kh_diff < 0: st.error(f"📉 KH 부족. 추천: {base_dose+0.3*vol_factor:.2f}ml")
+        else: st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-0.3*vol_factor):.2f}ml")
 
     st.subheader("📋 전체 기록 (Logs)")
     st.dataframe(df.sort_values("날짜", ascending=False), use_container_width=True)
 else:
-    st.info("👋 아직 기록이 없습니다. 위에서 첫 번째 기록을 입력해주세요!")
+    st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
