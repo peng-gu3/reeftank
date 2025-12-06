@@ -10,7 +10,7 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# 👇👇👇 [여기에 선생님의 JSON 키를 붙여넣으세요] 👇👇👇
+# 👇👇👇 [여기에 JSON 키를 붙여넣으세요] 👇👇👇
 ROBOT_KEY = """
 {
   "type": "service_account",
@@ -28,17 +28,42 @@ ROBOT_KEY = """
 """
 # 👆👆👆 [여기까지만 수정하세요] 👆👆👆
 
-# --- 1. 인증 ---
+# --- 1. 인증 (자동 수리 기능 탑재) ---
 def get_creds():
     try:
-        if "project_id" not in ROBOT_KEY: st.error("🚨 키가 비어있습니다."); st.stop()
-        return json.loads(ROBOT_KEY, strict=False)
+        # 키가 비어있는지 확인
+        if "project_id" not in ROBOT_KEY or "..." in ROBOT_KEY:
+            st.error("🚨 **코드 위쪽 'ROBOT_KEY' 부분에 JSON 내용을 붙여넣어 주세요!**")
+            st.stop()
+        
+        # 1. JSON 읽기
+        creds = json.loads(ROBOT_KEY, strict=False)
+        
+        # 2. [핵심] 깨진 비밀번호 자동 수리 (이게 에러를 고칩니다!)
+        if "private_key" in creds:
+            pk = creds["private_key"]
+            # 1) 가짜 줄바꿈(\\n)을 진짜 줄바꿈(\n)으로 변경
+            pk = pk.replace("\\n", "\n")
+            # 2) 혹시 앞뒤에 이상한 공백이 있으면 제거
+            pk = pk.strip()
+            # 3) 헤더가 깨졌으면 복구
+            if "-----BEGIN PRIVATE KEY----- " in pk:
+                pk = pk.replace("-----BEGIN PRIVATE KEY----- ", "-----BEGIN PRIVATE KEY-----\n")
+            if " -----END PRIVATE KEY-----" in pk:
+                pk = pk.replace(" -----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----")
+            
+            creds["private_key"] = pk
+            
+        return creds
+        
     except json.JSONDecodeError as e:
-        st.error(f"🚨 키 형식 오류: {e}"); st.stop()
+        st.error(f"🚨 키 형식 오류: {e}")
+        st.info("메모장에서 { 괄호부터 } 괄호까지 빠짐없이 복사했는지 확인해주세요.")
+        st.stop()
 
 creds_dict = get_creds()
 
-# --- 2. 구글 시트 연결 (주소 직접 입력 기능 추가) ---
+# --- 2. 구글 시트 연결 (주소/이름 모두 시도) ---
 def get_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -48,27 +73,20 @@ def get_sheet_tabs():
     client = get_client()
     sh = None
     
-    # 1차 시도: 이름으로 찾기
-    try: 
-        sh = client.open(SHEET_NAME)
-    except: 
-        pass # 실패하면 2차 시도로 넘어감
+    # 1. 이름으로 찾기
+    try: sh = client.open(SHEET_NAME)
+    except: pass
 
-    # 2차 시도: 주소(URL)로 찾기 (화면에서 입력받음)
+    # 2. 실패하면 주소 입력창 띄우기
     if sh is None:
-        st.warning(f"⚠️ '{SHEET_NAME}' 파일을 이름으로 못 찾았습니다.")
-        st.info("👇 **구글 시트 인터넷 주소(URL)**를 복사해서 아래 칸에 붙여넣고 엔터를 치세요!")
-        
-        # 주소 입력창 (예: https://docs.google.com/spreadsheets/d/...)
-        sheet_url = st.text_input("구글 시트 URL 붙여넣기:", key="sheet_url_input")
-        
+        st.warning(f"⚠️ '{SHEET_NAME}' 파일을 못 찾았습니다. (초대는 하셨죠?)")
+        sheet_url = st.text_input("👇 구글 시트 인터넷 주소(URL)를 여기에 붙여넣고 엔터!", key="url")
         if sheet_url:
             try:
                 sh = client.open_by_url(sheet_url)
-                st.success("✅ 주소로 연결 성공! (잠시 후 화면이 바뀝니다)")
-                st.session_state['sheet_url'] = sheet_url # 주소 기억하기
+                st.success("✅ 주소로 연결 성공!")
             except Exception as e:
-                st.error(f"🚨 연결 실패. \n1. 위에서 **'Google Sheets API'**를 켰는지 확인하세요.\n2. 에러 내용: {e}")
+                st.error(f"🚨 연결 실패: {e}")
                 st.stop()
         else:
             st.stop()
@@ -226,4 +244,3 @@ if not df.empty:
             st.warning("먼저 표에서 지울 항목을 체크해주세요.")
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
-
