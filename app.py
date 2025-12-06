@@ -10,7 +10,7 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# 👇👇👇 [여기에 JSON 키를 붙여넣으세요] 👇👇👇
+# 👇👇👇 [여기에 선생님의 JSON 키를 붙여넣으세요] 👇👇👇
 ROBOT_KEY = """
 {
   "type": "service_account",
@@ -28,32 +28,17 @@ ROBOT_KEY = """
 """
 # 👆👆👆 [여기까지만 수정하세요] 👆👆👆
 
-# --- 1. 인증 (자동 수리 기능 탑재) ---
+# --- 1. 인증 ---
 def get_creds():
     try:
-        # 키가 비어있는지 확인
-        if "project_id" not in ROBOT_KEY or "..." in ROBOT_KEY:
-            st.error("🚨 **코드 위쪽 'ROBOT_KEY' 부분에 JSON 내용을 붙여넣어 주세요!**")
-            st.stop()
-        
-        # 1. JSON 읽기 (느슨한 모드)
-        creds = json.loads(ROBOT_KEY, strict=False)
-        
-        # 2. [핵심 수정] 깨진 줄바꿈 문자(\n) 자동 수리!
-        # 이 부분이 'Invalid JWT Signature' 에러를 해결합니다.
-        if "private_key" in creds:
-            creds["private_key"] = creds["private_key"].replace("\\n", "\n")
-            
-        return creds
-        
+        if "project_id" not in ROBOT_KEY: st.error("🚨 키가 비어있습니다."); st.stop()
+        return json.loads(ROBOT_KEY, strict=False)
     except json.JSONDecodeError as e:
-        st.error(f"🚨 키 형식 오류: {e}")
-        st.info("메모장에서 { 괄호부터 } 괄호까지 빠짐없이 복사했는지 확인해주세요.")
-        st.stop()
+        st.error(f"🚨 키 형식 오류: {e}"); st.stop()
 
 creds_dict = get_creds()
 
-# --- 2. 구글 시트 연결 ---
+# --- 2. 구글 시트 연결 (주소 직접 입력 기능 추가) ---
 def get_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -61,18 +46,31 @@ def get_client():
 
 def get_sheet_tabs():
     client = get_client()
+    sh = None
+    
+    # 1차 시도: 이름으로 찾기
     try: 
         sh = client.open(SHEET_NAME)
-    except Exception as e:
-        client_email = creds_dict.get("client_email", "확인 불가")
-        st.error(f"🚨 **구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다!**")
-        st.markdown(f"""
-        **해결 방법:**
-        1. 구글 시트 제목이 정확히 **`{SHEET_NAME}`** 인지 확인하세요.
-        2. 아래 이메일을 시트에 **'편집자'**로 초대했는지 확인하세요.
-        👉 **{client_email}**
-        """)
-        st.stop()
+    except: 
+        pass # 실패하면 2차 시도로 넘어감
+
+    # 2차 시도: 주소(URL)로 찾기 (화면에서 입력받음)
+    if sh is None:
+        st.warning(f"⚠️ '{SHEET_NAME}' 파일을 이름으로 못 찾았습니다.")
+        st.info("👇 **구글 시트 인터넷 주소(URL)**를 복사해서 아래 칸에 붙여넣고 엔터를 치세요!")
+        
+        # 주소 입력창 (예: https://docs.google.com/spreadsheets/d/...)
+        sheet_url = st.text_input("구글 시트 URL 붙여넣기:", key="sheet_url_input")
+        
+        if sheet_url:
+            try:
+                sh = client.open_by_url(sheet_url)
+                st.success("✅ 주소로 연결 성공! (잠시 후 화면이 바뀝니다)")
+            except Exception as e:
+                st.error(f"🚨 연결 실패. 공유가 안 된 것 같습니다.\n\n로봇 이메일: **{creds_dict['client_email']}**\n이 주소를 시트에 '편집자'로 초대했는지 꼭 확인하세요!")
+                st.stop()
+        else:
+            st.stop()
 
     sheet_log = sh.sheet1
     if sheet_log.title != "Logs": 
@@ -169,8 +167,7 @@ st.success("✅ 구글 시트 연결됨")
 with st.expander("📝 새 기록 입력하기", expanded=False):
     with st.form("entry"):
         c1,c2,c3,c4 = st.columns(4)
-        d_date=c1.date_input("날짜",date.today())
-        d_kh=c1.number_input("KH",value=t_kh,step=0.01)
+        d_date=c1.date_input("날짜",date.today()); d_kh=c1.number_input("KH",value=t_kh,step=0.01)
         d_ca=c2.number_input("Ca",value=t_ca,step=10); d_mg=c2.number_input("Mg",value=t_mg,step=10)
         d_no2=c3.number_input("NO2",value=0.0,format="%.3f",step=0.001); d_no3=c3.number_input("NO3",value=t_no3,step=0.1); d_po4=c3.number_input("PO4",value=t_po4,format="%.3f",step=0.01)
         d_ph=c4.number_input("pH",value=t_ph,step=0.1); d_sal=c4.number_input("염도",value=35.0,step=0.1); d_temp=c4.number_input("온도",value=25.0,step=0.1)
@@ -202,11 +199,10 @@ if not df.empty:
             st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml")
 
     st.divider()
-    st.subheader("📋 전체 기록 관리")
+    st.subheader("📋 전체 기록 관리 (체크 후 삭제)")
     df_display = df.sort_values("날짜", ascending=False).copy()
     df_display.insert(0, "삭제", False)
     
-    # 메모 내용 그대로 보여주기
     df_display['Memo'] = df_display['Memo'].apply(lambda x: str(x) if x else "")
 
     edited_df = st.data_editor(
