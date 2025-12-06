@@ -111,4 +111,42 @@ with st.sidebar:
     st.header("⚙️ 설정"); cfg=st.session_state.config
     volume=st.number_input("물량",value=cfg["volume"],step=0.1); base_dose=st.number_input("도징량",value=cfg["base_dose"],step=0.01)
     st.divider(); st.subheader("🎯 목표")
-    t_kh=st.number_input("KH",value=cfg["t_kh"],step=0.01); t_ca=st.number_input("Ca",value=cfg["t_ca"]); t_mg=st.number_input("Mg",value
+    t_kh=st.number_input("KH",value=cfg["t_kh"],step=0.01); t_ca=st.number_input("Ca",value=cfg["t_ca"]); t_mg=st.number_input("Mg",value=cfg["t_mg"])
+    t_no2=st.number_input("NO2",value=cfg["t_no2"],format="%.3f"); t_no3=st.number_input("NO3",value=cfg["t_no3"]); t_po4=st.number_input("PO4",value=cfg["t_po4"],format="%.3f"); t_ph=st.number_input("pH",value=cfg["t_ph"])
+    st.session_state.config.update({"volume":volume,"base_dose":base_dose,"t_kh":t_kh,"t_ca":t_ca,"t_mg":t_mg,"t_no2":t_no2,"t_no3":t_no3,"t_po4":t_po4,"t_ph":t_ph})
+
+st.title("🌊 My Triton Manager (Cloud)")
+
+# 시트 연결 시도 (실패시 업로더 뜸)
+sheet = connect_to_gsheet()
+
+if sheet:
+    with st.expander("📝 기록 입력", expanded=True):
+        with st.form("entry"):
+            c1,c2,c3,c4 = st.columns(4)
+            d_date=c1.date_input("날짜",date.today()); d_kh=c1.number_input("KH",value=t_kh,step=0.01)
+            d_ca=c2.number_input("Ca",value=t_ca); d_mg=c2.number_input("Mg",value=t_mg)
+            d_no2=c3.number_input("NO2",value=0.0,format="%.3f"); d_no3=c3.number_input("NO3",value=t_no3); d_po4=c3.number_input("PO4",value=t_po4,format="%.3f")
+            d_ph=c4.number_input("pH",value=t_ph); d_sal=c4.number_input("염도",value=35.0); d_temp=c4.number_input("온도",value=25.0)
+            d_memo=st.text_area("메모")
+            if st.form_submit_button("저장 💾"):
+                entry={"날짜":d_date,"KH":d_kh,"Ca":d_ca,"Mg":d_mg,"NO2":d_no2,"NO3":d_no3,"PO4":d_po4,"pH":d_ph,"Temp":d_temp,"Salinity":d_sal,"도징량":base_dose,"Memo":d_memo}
+                if save_data(entry): st.toast("저장됨!"); st.rerun()
+
+    st.divider()
+    df=load_data()
+    if not df.empty:
+        last=df.iloc[-1]
+        g1,g2=st.columns([1.2,0.8])
+        g1.plotly_chart(draw_radar(["KH","Ca","Mg"],[last["KH"],last["Ca"],last["Mg"]],[t_kh,t_ca,t_mg],"3요소","#00FFAA"),use_container_width=True)
+        g1.plotly_chart(draw_radar(["NO2","NO3","PO4","pH"],[last["NO2"],last["NO3"],last["PO4"]*100,last["pH"]],[t_no2,t_no3,t_po4*100,t_ph],"영양염","#FF5500"),use_container_width=True)
+        g2.subheader("🤖 AI 분석")
+        diff=last["KH"]-t_kh
+        if abs(diff)<=0.15: g2.info(f"✅ KH 완벽 ({last['KH']})")
+        elif diff<0: g2.error(f"📉 KH 부족. 추천: {base_dose+0.3*(volume/100):.2f}ml")
+        else: g2.warning(f"📈 KH 과다. 추천: {max(0, base_dose-0.3*(volume/100)):.2f}ml")
+        
+        st.subheader("📋 기록")
+        st.dataframe(df.sort_values("날짜",ascending=False),use_container_width=True)
+else:
+    st.info("👆 위에서 키 파일을 먼저 업로드해주세요.")
