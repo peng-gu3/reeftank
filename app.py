@@ -10,36 +10,36 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# --- 1. 인증 ---
+# 👇👇👇 [중요] 여기에 선생님의 JSON 내용을 붙여넣으세요! 👇👇👇
+# 메모장 내용을 전체 복사해서 아래 따옴표 3개 사이에 붙여넣으면 됩니다.
+ROBOT_KEY = """
+{
+  "type": "service_account",
+  "project_id": "...",
+  "private_key_id": "...",
+  "client_email": "...",
+  "client_id": "...",
+  ... (나머지 내용들) ...
+}
+"""
+# 👆👆👆 [여기까지만 수정하세요] 👆👆👆
+
+# --- 1. 인증 (코드에 있는 키 사용) ---
 def get_creds():
-    if "gcp_service_account" in st.secrets:
-        try:
-            secrets_data = st.secrets["gcp_service_account"]
-            if "info" in secrets_data: return json.loads(secrets_data["info"])
-            else: return dict(secrets_data)
-        except: pass
-    if "uploaded_creds" in st.session_state: return st.session_state.uploaded_creds
-    return None
+    try:
+        # 입력된 키가 비어있는지 확인
+        if "project_id" not in ROBOT_KEY:
+            st.error("🚨 **코드 위쪽에 있는 'ROBOT_KEY' 부분에 JSON 내용을 붙여넣어 주세요!**")
+            st.stop()
+        
+        # 특수문자 등으로 깨진 경우를 대비해 느슨하게 파싱
+        return json.loads(ROBOT_KEY, strict=False)
+    except json.JSONDecodeError as e:
+        st.error(f"🚨 키 형식 오류: {e}")
+        st.info("메모장에서 { 괄호부터 } 괄호까지 빠짐없이 복사했는지 확인해주세요.")
+        st.stop()
 
 creds_dict = get_creds()
-
-if creds_dict is None:
-    st.warning("⚠️ **로봇 열쇠 파일(JSON)**을 업로드해주세요.")
-    uploaded_file = st.file_uploader("JSON 파일 드래그 & 드롭", type="json", key="auth")
-    if uploaded_file:
-        try:
-            creds = json.load(uploaded_file)
-            if "client_email" in creds:
-                st.session_state.uploaded_creds = creds
-                st.success("✅ 인증 성공! (새로고침 중...)")
-                st.rerun()
-            else: st.error("🚨 올바른 키 파일이 아닙니다.")
-        except: st.error("🚨 파일 읽기 오류")
-    st.stop()
-
-# --- 🚨 [긴급 진단] 로봇 이메일 표시 ---
-client_email = creds_dict.get("client_email", "확인 불가")
-st.info(f"📢 **[필수 확인]** 아래 이메일이 구글 시트에 초대되어 있나요?\n\n**{client_email}**\n\n👉 이 주소를 복사해서 구글 시트 [공유] 버튼을 누르고 추가해주세요!")
 
 # --- 2. 구글 시트 연결 ---
 def get_client():
@@ -49,16 +49,9 @@ def get_client():
 
 def get_sheet_tabs():
     client = get_client()
-    try: 
-        sh = client.open(SHEET_NAME)
-    except Exception as e:
-        st.error(f"🚨 **구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다!**")
-        st.markdown(f"""
-        **해결 방법:**
-        1. 구글 시트 제목이 정확히 **`{SHEET_NAME}`** 인지 확인하세요. (띄어쓰기 금지!)
-        2. 위 파란 박스에 있는 **로봇 이메일**을 시트 [공유] 버튼 눌러서 추가했는지 확인하세요.
-        3. 에러 내용: {e}
-        """)
+    try: sh = client.open(SHEET_NAME)
+    except: 
+        st.error(f"🚨 구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다. (공유가 잘 됐는지 확인하세요!)")
         st.stop()
 
     sheet_log = sh.sheet1
@@ -81,11 +74,15 @@ def load_data():
     sheet_log, _ = get_sheet_tabs()
     rows = sheet_log.get_all_values()
     if len(rows) < 2: return pd.DataFrame(columns=HEADERS)
+    
     df = pd.DataFrame(rows[1:], columns=HEADERS)
+    # 삭제를 위해 행 번호 저장
     df['_row_idx'] = range(2, len(df) + 2)
+    
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
-        if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
     return df
 
 def save_data(entry):
@@ -96,7 +93,9 @@ def save_data(entry):
 
 def delete_rows_by_indices(row_indices):
     sheet_log, _ = get_sheet_tabs()
-    for idx in sorted(row_indices, reverse=True): sheet_log.delete_rows(idx)
+    # 뒤에서부터 지워야 순서가 안 꼬임
+    for idx in sorted(row_indices, reverse=True):
+        sheet_log.delete_rows(idx)
 
 # --- 4. 설정 관리 ---
 def load_config():
@@ -145,6 +144,7 @@ with st.sidebar:
     t_no3 = st.number_input("목표 NO3", value=float(cfg["t_no3"]), step=0.1)
     t_po4 = st.number_input("목표 PO4", value=float(cfg["t_po4"]), format="%.3f", step=0.01)
     t_ph = st.number_input("목표 pH", value=float(cfg["t_ph"]), step=0.1)
+    
     if st.button("💾 설정값 영구 저장"):
         new_conf = {"volume":volume, "base_dose":base_dose, "t_kh":t_kh, "t_ca":t_ca, "t_mg":t_mg, "t_no2":t_no2, "t_no3":t_no3, "t_po4":t_po4, "t_ph":t_ph}
         save_config(new_conf)
@@ -156,7 +156,8 @@ st.success("✅ 구글 시트 연결됨")
 with st.expander("📝 새 기록 입력하기", expanded=False):
     with st.form("entry"):
         c1,c2,c3,c4 = st.columns(4)
-        d_date=c1.date_input("날짜",date.today()); d_kh=c1.number_input("KH",value=t_kh,step=0.01)
+        d_date=c1.date_input("날짜",date.today())
+        d_kh=c1.number_input("KH",value=t_kh,step=0.01)
         d_ca=c2.number_input("Ca",value=t_ca,step=10); d_mg=c2.number_input("Mg",value=t_mg,step=10)
         d_no2=c3.number_input("NO2",value=0.0,format="%.3f",step=0.001); d_no3=c3.number_input("NO3",value=t_no3,step=0.1); d_po4=c3.number_input("PO4",value=t_po4,format="%.3f",step=0.01)
         d_ph=c4.number_input("pH",value=t_ph,step=0.1); d_sal=c4.number_input("염도",value=35.0,step=0.1); d_temp=c4.number_input("온도",value=25.0,step=0.1)
@@ -188,29 +189,34 @@ if not df.empty:
             st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml")
 
     st.divider()
-    st.subheader("📋 전체 기록 관리 (체크 후 삭제)")
-    df_display = df.sort_values("날짜", ascending=False).copy()
-    df_display.insert(0, "삭제", False)
+    st.subheader("📋 전체 기록 관리")
     
-    # 메모 내용을 표 안에 바로 표시
-    df_display['Memo'] = df_display['Memo'].apply(lambda x: str(x) if x else "")
+    # 데이터 준비 (삭제용 체크박스 추가)
+    df_display = df.sort_values("날짜", ascending=False).copy()
+    df_display.insert(0, "삭제", False) # 맨 앞에 체크박스 컬럼
 
+    # 에디터 표시
     edited_df = st.data_editor(
         df_display,
         column_config={
-            "삭제": st.column_config.CheckboxColumn("삭제 선택", default=False), 
-            "_row_idx": None,
-            "Memo": st.column_config.TextColumn("메모", width="large") # 메모 넓게 보기
+            "삭제": st.column_config.CheckboxColumn("선택", width="small"),
+            "_row_idx": None, # 행 번호 숨김
+            "Memo": st.column_config.TextColumn("메모", width="large") # 메모 바로 보이기
         },
-        disabled=HEADERS, hide_index=True, use_container_width=True
+        disabled=HEADERS, # 데이터 수정 금지 (삭제만 가능)
+        hide_index=True,
+        use_container_width=True
     )
-    if st.button("🗑️ 선택한 기록 삭제하기", type="primary"):
+
+    # 삭제 버튼
+    if st.button("🗑️ 체크한 기록 삭제하기", type="primary"):
         rows_to_delete = edited_df[edited_df["삭제"] == True]
+        
         if not rows_to_delete.empty:
             indices = rows_to_delete["_row_idx"].tolist()
             delete_rows_by_indices(indices)
             st.toast(f"{len(indices)}개의 기록을 삭제했습니다!"); st.rerun()
         else:
-            st.warning("먼저 표에서 지울 항목을 체크해주세요.")
+            st.warning("먼저 표에서 지울 항목을 체크(☑️)해주세요.")
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
