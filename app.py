@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import date
+from datetime import date, timedelta
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
@@ -12,40 +12,30 @@ HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도
 
 # --- 1. 인증 및 연결 ---
 def get_creds():
-    # Secrets 먼저 확인
     if "gcp_service_account" in st.secrets:
         try:
             secrets_data = st.secrets["gcp_service_account"]
             if "info" in secrets_data: return json.loads(secrets_data["info"])
             else: return dict(secrets_data)
         except: pass
-    # 업로드된 파일 확인 (세션 저장소)
     if "uploaded_creds" in st.session_state: return st.session_state.uploaded_creds
     return None
 
 creds_dict = get_creds()
 
-# 인증 파일 없으면 업로더 표시
 if creds_dict is None:
     st.warning("⚠️ **로봇 열쇠 파일(JSON)**을 업로드해주세요.")
     uploaded_file = st.file_uploader("JSON 파일 드래그 & 드롭", type="json", key="auth")
-    
     if uploaded_file:
-        # [핵심 수정] 파일 읽는 부분과 새로고침 부분을 분리하여 에러 방지
-        creds = None
         try:
             creds = json.load(uploaded_file)
-        except Exception as e:
-            st.error(f"🚨 파일 읽기 오류: {e}")
-            st.stop()
-            
-        if creds and "client_email" in creds:
-            st.session_state.uploaded_creds = creds
-            st.success("✅ 인증 성공! (잠시만 기다리세요...)")
-            st.rerun() # 이제 여기서 에러 안 남!
-        else:
-            st.error("🚨 올바른 키 파일이 아닙니다.")
-    st.stop() # 인증 전에는 아래 코드 실행 막기
+            if "client_email" in creds:
+                st.session_state.uploaded_creds = creds
+                st.success("✅ 인증 성공! (새로고침 중...)")
+                st.rerun()
+            else: st.error("🚨 올바른 키 파일이 아닙니다.")
+        except: st.error("🚨 파일 읽기 오류")
+    st.stop()
 
 # --- 2. 구글 시트 연결 ---
 def get_client():
@@ -63,7 +53,6 @@ def get_sheet_tabs():
         try: sheet_log.update_title("Logs")
         except: pass
     
-    # 헤더 복구
     try:
         current_headers = sheet_log.row_values(1)
         if not current_headers or current_headers[0] != "날짜":
@@ -79,11 +68,21 @@ def load_data():
     sheet_log, _ = get_sheet_tabs()
     rows = sheet_log.get_all_values()
     if len(rows) < 2: return pd.DataFrame(columns=HEADERS)
+    
+    # 데이터프레임 생성
     df = pd.DataFrame(rows[1:], columns=HEADERS)
+    
+    # [중요] 삭제를 위해 구글 시트의 실제 행 번호(Row Number)를 추적합니다.
+    # 헤더가 1행이므로, 데이터는 2행부터 시작 (index 0 -> row 2)
+    df['sheet_row_num'] = range(2, len(df) + 2)
+    
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+    
+    # 날짜 형식 변환 (필터링을 위해)
+    df['날짜'] = pd.to_datetime(df['날짜']).dt.date
     return df
 
 def save_data(entry):
@@ -92,9 +91,10 @@ def save_data(entry):
     sheet_log.append_row(row)
     return True
 
-def delete_data(row_index):
+def delete_data(sheet_row_num):
+    """구글 시트의 특정 행 번호를 삭제합니다."""
     sheet_log, _ = get_sheet_tabs()
-    sheet_log.delete_rows(row_index + 2)
+    sheet_log.delete_rows(sheet_row_num)
 
 # --- 4. 설정 관리 ---
 def load_config():
@@ -121,7 +121,6 @@ def draw_radar(cats, vals, t_vals, title, color):
     cats=[*cats,cats[0]]; norm_vals=[*norm_vals,norm_vals[0]]; txt_vals=[*txt_vals,""]
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(r=[1]*len(cats), theta=cats, line_color="white", line_dash='dot', name='목표'))
-    # textfont, angularaxis에서 weight 속성 제거 (에러 원천 차단)
     fig.add_trace(go.Scatterpolar(r=norm_vals, theta=cats, fill='toself', line_color=color, mode='lines+markers+text', text=txt_vals, textfont=dict(color=color)))
     fig.update_layout(polar=dict(radialaxis=dict(visible=False, range=[0,1.5]), angularaxis=dict(tickfont=dict(color="#00BFFF", size=12)), bgcolor="rgba(0,0,0,0)"), paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#00BFFF"), height=350, margin=dict(t=40,b=40))
     return fig
@@ -132,6 +131,7 @@ st.title("🌊 My Triton Manager (Cloud)")
 if "config" not in st.session_state: st.session_state.config = load_config()
 cfg = st.session_state.config
 
+# 사이드바
 with st.sidebar:
     st.header("⚙️ 수조 & 목표 설정")
     volume = st.number_input("물량 (L)", value=float(cfg["volume"]), step=0.1)
@@ -166,7 +166,7 @@ with st.expander("📝 새 기록 입력하기", expanded=False):
         d_ph=c4.number_input("pH",value=t_ph,step=0.1)
         d_sal=c4.number_input("염도",value=35.0,step=0.1)
         d_temp=c4.number_input("온도",value=25.0,step=0.1)
-        d_memo=st.text_area("메모 (길게 써도 됩니다)")
+        d_memo=st.text_area("메모")
         if st.form_submit_button("저장 💾"):
             entry={"날짜":d_date,"KH":d_kh,"Ca":d_ca,"Mg":d_mg,"NO2":d_no2,"NO3":d_no3,"PO4":d_po4,"pH":d_ph,"Temp":d_temp,"Salinity":d_sal,"도징량":base_dose,"Memo":d_memo}
             if save_data(entry): st.toast("저장되었습니다!"); st.rerun()
@@ -182,40 +182,77 @@ if not df.empty:
         c1.plotly_chart(draw_radar(["KH","Ca","Mg"],[last["KH"],last["Ca"],last["Mg"]],[t_kh,t_ca,t_mg],"3요소","#00FFAA"), use_container_width=True)
         c2.plotly_chart(draw_radar(["NO2","NO3","PO4","pH"],[last["NO2"],last["NO3"],last["PO4"]*100,last["pH"]],[t_no2,t_no3,t_po4*100,t_ph],"영양염","#FF5500"), use_container_width=True)
     with g2:
-        st.subheader("🤖 AI 분석 (최신 기록)")
+        st.subheader("🤖 AI 분석")
         kh_diff = last["KH"] - t_kh
         vol_factor = volume / 100.0
         if abs(kh_diff) <= 0.15: st.info(f"✅ KH 완벽 ({last['KH']})")
         elif kh_diff < 0: 
             add = 0.3 * vol_factor
-            st.error(f"📉 KH 부족. 추천: {base_dose+add:.2f}ml (현재 {base_dose}ml)")
+            st.error(f"📉 KH 부족. 추천: {base_dose+add:.2f}ml")
         else: 
             sub = 0.3 * vol_factor
-            st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml (현재 {base_dose}ml)")
+            st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml")
 
     st.divider()
-    st.subheader("📋 전체 기록 관리")
-    df_display = df.copy()
-    df_display['Memo'] = df_display['Memo'].apply(lambda x: "📝있음" if x and str(x).strip() != "" else "")
-    st.dataframe(df_display.sort_values("날짜", ascending=False), use_container_width=True)
     
-    st.markdown("### 🔍 기록 상세 보기 & 삭제")
-    sorted_indices = df.sort_values("날짜", ascending=False).index
-    if not sorted_indices.empty:
-        selected_idx = st.selectbox("확인/삭제할 기록 선택:", options=sorted_indices, format_func=lambda i: f"{df.loc[i, '날짜']} (KH: {df.loc[i, 'KH']}, #{i+1})")
-        if selected_idx is not None:
-            sel_row = df.loc[selected_idx]
-            with st.container(border=True):
-                col_a, col_b = st.columns([3, 1])
-                with col_a:
-                    st.markdown(f"**📅 날짜:** {sel_row['날짜']} / **🧪 KH:** {sel_row['KH']} / **💧 도징량:** {sel_row['도징량']}ml")
-                    full_memo = sel_row['Memo'] if sel_row['Memo'] else "(메모 없음)"
-                    st.info(f"**📝 메모 내용:**\n\n{full_memo}")
-                with col_b:
-                    st.write("")
-                    st.write("")
-                    if st.button("🗑️ 이 기록 삭제", type="primary", key=f"del_{selected_idx}"):
-                        delete_data(selected_idx)
-                        st.toast("기록이 삭제되었습니다."); st.rerun()
+    # ---------------------------------------------------------
+    # [수정된 부분] 목록 UI 개선: 최근 7일 보기 + 펼치기 + 바로 삭제
+    # ---------------------------------------------------------
+    st.subheader("📋 기록 목록")
+    
+    # 1. 보기 모드 선택 (최근 7일 vs 전체 검색)
+    col_filter, col_empty = st.columns([2, 3])
+    with col_filter:
+        view_mode = st.radio("보기 옵션", ["최근 7일만 보기", "🔍 전체 기록 검색/보기"], horizontal=True)
+    
+    # 2. 데이터 필터링
+    df_sorted = df.sort_values("날짜", ascending=False) # 최신순 정렬
+    
+    if view_mode == "최근 7일만 보기":
+        seven_days_ago = date.today() - timedelta(days=7)
+        filtered_df = df_sorted[df_sorted["날짜"] >= seven_days_ago]
+    else:
+        # 검색 기능 (날짜 선택 또는 전체)
+        search_date = st.date_input("날짜로 검색 (선택 안 하면 전체)", value=None)
+        if search_date:
+            filtered_df = df_sorted[df_sorted["날짜"] == search_date]
+        else:
+            filtered_df = df_sorted # 전체 보기
+
+    # 3. 리스트 출력 (Expander 사용)
+    if filtered_df.empty:
+        st.info("해당 기간의 기록이 없습니다.")
+    else:
+        for index, row in filtered_df.iterrows():
+            # 라벨 만들기 (날짜 | KH | 메모아이콘)
+            memo_icon = "📝" if row['Memo'] and str(row['Memo']).strip() != "" else ""
+            label_text = f"📅 {row['날짜']}  |  🧪 KH: {row['KH']}  |  💧 도징: {row['도징량']}ml  {memo_icon}"
+            
+            # 카드(Expander) 생성
+            with st.expander(label_text):
+                c_info, c_del = st.columns([4, 1])
+                
+                with c_info:
+                    # 상세 수치 보여주기
+                    st.markdown(f"""
+                    - **주요 3요소:** Ca {row['Ca']} / Mg {row['Mg']}
+                    - **영양염:** NO3 {row['NO3']} / PO4 {row['PO4']} / NO2 {row['NO2']}
+                    - **환경:** 염도 {row['Salinity']}ppt / 온도 {row['Temp']}°C / pH {row['pH']}
+                    """)
+                    
+                    # 메모가 있으면 보여주기
+                    if row['Memo'] and str(row['Memo']).strip() != "":
+                        st.info(f"**📝 메모:**\n{row['Memo']}")
+                    else:
+                        st.caption("(메모 없음)")
+                
+                with c_del:
+                    st.write("") # 줄바꿈
+                    # 바로 삭제 버튼 ( sheet_row_num 사용 )
+                    if st.button("🗑️ 삭제", key=f"del_{row['sheet_row_num']}", type="primary"):
+                        delete_data(row['sheet_row_num'])
+                        st.toast("삭제되었습니다! (새로고침 중...)")
+                        st.rerun()
+
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
