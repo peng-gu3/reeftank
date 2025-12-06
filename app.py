@@ -1,4 +1,16 @@
 import streamlit as st
+import json
+
+st.set_page_config(page_title="앱 생성기", layout="wide")
+st.title("🤖 최종 앱 코드 생성기")
+st.markdown("### 1. 아래 칸에 메모장에 있는 '로봇 열쇠(JSON)' 내용을 전부 붙여넣으세요.")
+st.info("컴퓨터에 있는 `reef-tank-...json` 파일을 열고 전체 복사(Ctrl+A, Ctrl+C)해서 넣으세요.")
+
+# 1. 키 입력 받기
+key_input = st.text_area("여기에 키 붙여넣기", height=300)
+
+# 2. 진짜 앱 코드 템플릿 (여기 건드리지 마세요)
+FINAL_APP_CODE = r'''import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import date
@@ -10,41 +22,18 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# 👇👇👇 [여기만 고치세요] 👇👇👇
-# 아까 메모장에서 복사한 '로봇 열쇠(JSON)' 내용을
-# 아래 따옴표 3개(""" ... """) 사이에 통째로 붙여넣으세요!
-# (기존에 써있는 예시 글씨는 지우고요!)
-
+# ▼▼▼ 선생님의 키가 여기에 자동으로 들어갑니다 ▼▼▼
 ROBOT_KEY = """
-{
-  "type": "service_account",
-  "project_id": "reef-e23b5",
-  "private_key_id": "b3a4d11962e6b31a469f1e26a50aa7e8e85ad1a7",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDOYfNgbwJskSq8\nR23lxBP2JzARFG4myiXkJ6uVA/tuHrTcIrw2SFmKcle5/AeXXc7KMLvHf+VNfMXW\nxeglERw5EL3eHe1UX1ByUGVnWHz8pypsjIdo8LdtRHldgzrz7mrlK1BGnCp+2iqL\n7fo2bnasCug/WoDir2khYZcYMKETF3jQ7YbiRgNWGkXimBrjQtSld4KV0fi2e8PM\nKFmd6Zzw6tIu7VvUAdGmp0fDiLp8Xv3DWIEVarmb40p4CIWXW/4Lc3ZlhXDLe3fI\nRUZCWFHGeNoHtfTBlhAlDZoUkFc2OFsibrcUk2gHvGj7fOeFHGcYFBFwG2JR7Spl\nwXBkFd1tAgMBAAECggEAGdVp/RK4N3XOZyX7zCyIoSHTovevOBzKtG4AzNTkRqsC\nUaHpdFQHHUzlzUqOerSL24RRJQ5N2i65pwI75lPnd/8v/Rs653pM3BpTLyYE8y1L\noq3Oj2S+WSeel4WDPiCEce5DjKskqJ9PfxeJYAHgyfVNkAyYoId7fem025rOttBa\nS/gmDtLPy526xnbsCdWycmIDMQWp/a7l2ELaMf9FikfpjKUL0bNqhcRGZElcSCYU\nQGHmaoK8DnpNox3rmbu37Lb42ppGislhpv12f5WshWYswPlBPrXUo26u7gLgDtcT\n5BRVTfBqaeYv4Co76TKtp9bGgLuonc2LFOh2zVEDcwKBgQDnO32EEn78RR8utMNy\nUTkMxI9fvjkspr/mrTaeFK3kPhm/JQG7D9w2t9KweU+6g6Qt5WeaEq15349ALdCI\nGGBhdntix8hlGmwWoW7ckUa0J5L3lIgPmQmXYWRa6WiH74H31rQrTxP8UUfxeVhQ\nOEYD2OAoTZs52x/iFQhhGJUFOwKBgQDkfRE0qhWd31y49iMYW89inKj88PDYUI11\nkuJ9XMf2AF2V5m+dn0z3AEfwkaVQf7dp4uXokuQ9L4vBWRIxVx9idmPkUiMt1EtU\nGI6flVI1j7XGhAfFHFhAvbDRjP41rDDVcXMyV3U0j8GRmfModTcpo8RSgJEPmAwO\nrdM8NR5ddwKBgQCm1n+rqYTCFEV5d6eFdiFJmxEvrZqnIvFXSScdTCJjioMdLWBg\nTgM/38Y+2miyVIVDMEBeJJfSVYGQdv39FEmGSOyhyzBF8piGg5fvwUpYdi1OQXci\nefM3rGeySLLJUgBeiCWbEgWDikn0au9TgibSY8roiYY0amxIvZA8LnZnPQKBgFIV\nfDDnSYzFyZHJGyKNGRvcG/mCtYOArNEoS6Wtx0hhKT3I4yBFMmkp+K48JJ+ewk2P\n7fh3jPdONW7oiNig6+17irdjqq+0LLuxdstt4XLMhgkjNYdif3ICs5sUg97UVVbY\nwwG62ahgXLHqFKjcM00KQGVDOtnXTb2YROLEUnxRAoGAJRe67TQdzfDYcxdX2JAx\nF+5o5jV4PyUmX7dHxcZHQfwEGUxBnw1OzRRbT4ZSZMYqsr4LSXaUCQVMhkDbvPmn\nLxcErtRpbjKWpf89PQzNGIrYujhMzODJAOBGTPuHDe4hCWu6sPyizBNzHAwgcolB\nv3CSENcbP/a4ZqDfs/GeGVE=\n-----END PRIVATE KEY-----\n",
-  "client_email": "reef-bot@reef-e23b5.iam.gserviceaccount.com",
-  "client_id": "101105675500933645721",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/reef-bot%40reef-e23b5.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}
+__KEY_HERE__
 """
-# 👆👆👆 [여기까지만 건드리면 됩니다] 👆👆👆
+# ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
-
-# --- 1. 무조건 연결 (업로드 X, 설정 X) ---
+# --- 1. 인증 ---
 def get_creds():
     try:
-        # 코드에 박힌 키를 읽어옵니다.
-        creds = json.loads(ROBOT_KEY)
-        return creds
-    except json.JSONDecodeError:
-        st.error("🚨 **코드에 열쇠를 안 넣으셨거나, 잘못 붙여넣으셨습니다!**")
-        st.error("app.py 파일 위쪽에 'ROBOT_KEY' 부분을 확인해주세요.")
-        st.stop()
+        return json.loads(ROBOT_KEY)
     except Exception as e:
-        st.error(f"🚨 알 수 없는 오류: {e}")
+        st.error(f"🚨 키 설정 오류: {e}")
         st.stop()
 
 creds_dict = get_creds()
@@ -58,7 +47,7 @@ def get_client():
 def get_sheet_tabs():
     client = get_client()
     try: sh = client.open(SHEET_NAME)
-    except: st.error(f"🚨 구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다."); st.stop()
+    except: st.error(f"🚨 구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다. (시트 이름을 확인하세요!)"); st.stop()
 
     sheet_log = sh.sheet1
     if sheet_log.title != "Logs": 
@@ -84,8 +73,7 @@ def load_data():
     df['_row_idx'] = range(2, len(df) + 2)
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+        if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
     return df
 
 def save_data(entry):
@@ -96,8 +84,7 @@ def save_data(entry):
 
 def delete_rows_by_indices(row_indices):
     sheet_log, _ = get_sheet_tabs()
-    for idx in sorted(row_indices, reverse=True):
-        sheet_log.delete_rows(idx)
+    for idx in sorted(row_indices, reverse=True): sheet_log.delete_rows(idx)
 
 # --- 4. 설정 관리 ---
 def load_config():
@@ -146,7 +133,6 @@ with st.sidebar:
     t_no3 = st.number_input("목표 NO3", value=float(cfg["t_no3"]), step=0.1)
     t_po4 = st.number_input("목표 PO4", value=float(cfg["t_po4"]), format="%.3f", step=0.01)
     t_ph = st.number_input("목표 pH", value=float(cfg["t_ph"]), step=0.1)
-    
     if st.button("💾 설정값 영구 저장"):
         new_conf = {"volume":volume, "base_dose":base_dose, "t_kh":t_kh, "t_ca":t_ca, "t_mg":t_mg, "t_no2":t_no2, "t_no3":t_no3, "t_po4":t_po4, "t_ph":t_ph}
         save_config(new_conf)
@@ -158,16 +144,10 @@ st.success("✅ 구글 시트 연결됨")
 with st.expander("📝 새 기록 입력하기", expanded=False):
     with st.form("entry"):
         c1,c2,c3,c4 = st.columns(4)
-        d_date=c1.date_input("날짜",date.today())
-        d_kh=c1.number_input("KH",value=t_kh,step=0.01)
-        d_ca=c2.number_input("Ca",value=t_ca,step=10)
-        d_mg=c2.number_input("Mg",value=t_mg,step=10)
-        d_no2=c3.number_input("NO2",value=0.0,format="%.3f",step=0.001)
-        d_no3=c3.number_input("NO3",value=t_no3,step=0.1)
-        d_po4=c3.number_input("PO4",value=t_po4,format="%.3f",step=0.01)
-        d_ph=c4.number_input("pH",value=t_ph,step=0.1)
-        d_sal=c4.number_input("염도",value=35.0,step=0.1)
-        d_temp=c4.number_input("온도",value=25.0,step=0.1)
+        d_date=c1.date_input("날짜",date.today()); d_kh=c1.number_input("KH",value=t_kh,step=0.01)
+        d_ca=c2.number_input("Ca",value=t_ca,step=10); d_mg=c2.number_input("Mg",value=t_mg,step=10)
+        d_no2=c3.number_input("NO2",value=0.0,format="%.3f",step=0.001); d_no3=c3.number_input("NO3",value=t_no3,step=0.1); d_po4=c3.number_input("PO4",value=t_po4,format="%.3f",step=0.01)
+        d_ph=c4.number_input("pH",value=t_ph,step=0.1); d_sal=c4.number_input("염도",value=35.0,step=0.1); d_temp=c4.number_input("온도",value=25.0,step=0.1)
         d_memo=st.text_area("메모")
         if st.form_submit_button("저장 💾"):
             entry={"날짜":d_date,"KH":d_kh,"Ca":d_ca,"Mg":d_mg,"NO2":d_no2,"NO3":d_no3,"PO4":d_po4,"pH":d_ph,"Temp":d_temp,"Salinity":d_sal,"도징량":base_dose,"Memo":d_memo}
@@ -199,13 +179,11 @@ if not df.empty:
     st.subheader("📋 전체 기록 관리 (체크 후 삭제)")
     df_display = df.sort_values("날짜", ascending=False).copy()
     df_display.insert(0, "삭제", False)
-
     edited_df = st.data_editor(
         df_display,
         column_config={"삭제": st.column_config.CheckboxColumn("삭제 선택", default=False), "_row_idx": None},
         disabled=HEADERS, hide_index=True, use_container_width=True
     )
-
     if st.button("🗑️ 선택한 기록 삭제하기", type="primary"):
         rows_to_delete = edited_df[edited_df["삭제"] == True]
         if not rows_to_delete.empty:
@@ -216,3 +194,20 @@ if not df.empty:
             st.warning("먼저 표에서 지울 항목을 체크해주세요.")
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
+'''
+
+if st.button("🚀 내 전용 앱 코드 만들기 (클릭)"):
+    if not key_input.strip():
+        st.error("⚠️ 키 내용을 먼저 붙여넣어 주세요!")
+    else:
+        try:
+            # 1. 키가 정상적인지 확인
+            json.loads(key_input)
+            
+            # 2. 코드 생성
+            final_code = FINAL_APP_CODE.replace("__KEY_HERE__", key_input)
+            
+            st.success("🎉 생성 완료! 아래 코드를 복사해서 app.py에 다시 덮어씌우면 끝입니다.")
+            st.code(final_code, language="python")
+        except:
+            st.error("🚨 붙여넣으신 내용이 JSON 형식이 아닙니다. 메모장에서 다시 전체 선택해서 복사해주세요.")
