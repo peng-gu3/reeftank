@@ -9,40 +9,62 @@ import json
 st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wide")
 SHEET_NAME = "MyReefLog"
 
-# --- 구글 시트 연결 (에러 방지 기능 추가됨) ---
+# --- 1. 강력해진 구글 시트 연결 함수 ---
 def connect_to_gsheet():
     try:
         if "gcp_service_account" not in st.secrets:
             st.error("🚨 Secrets 설정이 비어있습니다.")
             return None
         
-        # info 방식으로 저장된 JSON 읽기
+        # 1. Secrets에서 정보 가져오기
         secrets_data = st.secrets["gcp_service_account"]
+        
+        # 2. JSON 파싱 (info 방식 vs 개별 방식 자동 감지)
         if "info" in secrets_data:
-            creds_dict = json.loads(secrets_data["info"])
+            try:
+                creds_dict = json.loads(secrets_data["info"])
+            except json.JSONDecodeError:
+                # 만약 JSON이 깨져있으면, 억지로라도 고쳐보는 시도 (엔터 제거 등)
+                cleaned_info = secrets_data["info"].replace('\n', '\\n')
+                try:
+                    creds_dict = json.loads(cleaned_info, strict=False)
+                except:
+                    st.error("🚨 Secrets의 JSON 형식이 너무 많이 깨져있어서 복구할 수 없습니다. 다시 붙여넣어 주세요.")
+                    return None
         else:
             creds_dict = dict(secrets_data)
 
+        # 3. [핵심 수정] 에러 원인 강제 해결! (신분증 위조(?) 기술)
+        # "type": "service_account" 가 없으면 강제로 넣어줍니다.
+        if "type" not in creds_dict:
+            creds_dict["type"] = "service_account"
+
+        # 4. 연결 시도
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         sheet = client.open(SHEET_NAME).sheet1
         return sheet
+        
     except Exception as e:
-        st.warning(f"⚠️ 연결 대기중... (설정이 완료되면 사라집니다)\n상세: {e}")
+        # 그래도 안 되면 정확한 이유를 보여줌
+        st.error(f"⚠️ 연결 오류 발생: {e}")
         return None
 
 # --- 데이터 관리 ---
 def load_data():
     sheet = connect_to_gsheet()
     if sheet:
-        data = sheet.get_all_records()
-        if not data: return pd.DataFrame(columns=["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"])
-        df = pd.read_json(json.dumps(data))
-        required = {"pH":8.1, "Memo":"", "NO2":0.0}
-        for c,v in required.items(): 
-            if c not in df.columns: df[c]=v
-        return df
+        try:
+            data = sheet.get_all_records()
+            if not data: return pd.DataFrame(columns=["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"])
+            df = pd.read_json(json.dumps(data))
+            required = {"pH":8.1, "Memo":"", "NO2":0.0}
+            for c,v in required.items(): 
+                if c not in df.columns: df[c]=v
+            return df
+        except:
+            return pd.DataFrame(columns=["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"])
     return pd.DataFrame(columns=["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"])
 
 def save_data(new_entry):
@@ -86,9 +108,9 @@ st.title("🌊 My Triton Manager (Cloud)")
 sheet = connect_to_gsheet()
 
 if sheet:
-    st.success(f"✅ 구글 시트 연결됨!")
+    st.success(f"✅ 구글 시트 연결 성공!")
 else:
-    st.warning("⚠️ Secrets 설정을 확인해주세요.")
+    st.error("⚠️ 아직 연결에 실패했습니다. (위 에러 메시지를 확인해주세요)")
 
 with st.expander("📝 기록 입력", expanded=True):
     with st.form("entry"):
