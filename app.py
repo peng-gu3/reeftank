@@ -10,34 +10,24 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# 👇👇👇 [중요] 여기에 선생님의 JSON 내용을 붙여넣으세요! 👇👇👇
-# 메모장 내용을 전체 복사해서 아래 따옴표 3개 사이에 붙여넣으면 됩니다.
+# --- 1. 인증 (코드에 있는 키 사용) ---
+# 👇 선생님의 키를 여기에 붙여넣으셨죠? (그대로 두시면 됩니다)
 ROBOT_KEY = """
 {
   "type": "service_account",
-  "project_id": "reef-e23b5",
-  "private_key_id": "b3a4d11962e6b31a469f1e26a50aa7e8e85ad1a7",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDOYfNgbwJskSq8\nR23lxBP2JzARFG4myiXkJ6uVA/tuHrTcIrw2SFmKcle5/AeXXc7KMLvHf+VNfMXW\nxeglERw5EL3eHe1UX1ByUGVnWHz8pypsjIdo8LdtRHldgzrz7mrlK1BGnCp+2iqL\n7fo2bnasCug/WoDir2khYZcYMKETF3jQ7YbiRgNWGkXimBrjQtSld4KV0fi2e8PM\nKFmd6Zzw6tIu7VvUAdGmp0fDiLp8Xv3DWIEVarmb40p4CIWXW/4Lc3ZlhXDLe3fI\nRUZCWFHGeNoHtfTBlhAlDZoUkFc2OFsibrcUk2gHvGj7fOeFHGcYFBFwG2JR7Spl\nwXBkFd1tAgMBAAECggEAGdVp/RK4N3XOZyX7zCyIoSHTovevOBzKtG4AzNTkRqsC\nUaHpdFQHHUzlzUqOerSL24RRJQ5N2i65pwI75lPnd/8v/Rs653pM3BpTLyYE8y1L\noq3Oj2S+WSeel4WDPiCEce5DjKskqJ9PfxeJYAHgyfVNkAyYoId7fem025rOttBa\nS/gmDtLPy526xnbsCdWycmIDMQWp/a7l2ELaMf9FikfpjKUL0bNqhcRGZElcSCYU\nQGHmaoK8DnpNox3rmbu37Lb42ppGislhpv12f5WshWYswPlBPrXUo26u7gLgDtcT\n5BRVTfBqaeYv4Co76TKtp9bGgLuonc2LFOh2zVEDcwKBgQDnO32EEn78RR8utMNy\nUTkMxI9fvjkspr/mrTaeFK3kPhm/JQG7D9w2t9KweU+6g6Qt5WeaEq15349ALdCI\nGGBhdntix8hlGmwWoW7ckUa0J5L3lIgPmQmXYWRa6WiH74H31rQrTxP8UUfxeVhQ\nOEYD2OAoTZs52x/iFQhhGJUFOwKBgQDkfRE0qhWd31y49iMYW89inKj88PDYUI11\nkuJ9XMf2AF2V5m+dn0z3AEfwkaVQf7dp4uXokuQ9L4vBWRIxVx9idmPkUiMt1EtU\nGI6flVI1j7XGhAfFHFhAvbDRjP41rDDVcXMyV3U0j8GRmfModTcpo8RSgJEPmAwO\nrdM8NR5ddwKBgQCm1n+rqYTCFEV5d6eFdiFJmxEvrZqnIvFXSScdTCJjioMdLWBg\nTgM/38Y+2miyVIVDMEBeJJfSVYGQdv39FEmGSOyhyzBF8piGg5fvwUpYdi1OQXci\nefM3rGeySLLJUgBeiCWbEgWDikn0au9TgibSY8roiYY0amxIvZA8LnZnPQKBgFIV\nfDDnSYzFyZHJGyKNGRvcG/mCtYOArNEoS6Wtx0hhKT3I4yBFMmkp+K48JJ+ewk2P\n7fh3jPdONW7oiNig6+17irdjqq+0LLuxdstt4XLMhgkjNYdif3ICs5sUg97UVVbY\nwwG62ahgXLHqFKjcM00KQGVDOtnXTb2YROLEUnxRAoGAJRe67TQdzfDYcxdX2JAx\nF+5o5jV4PyUmX7dHxcZHQfwEGUxBnw1OzRRbT4ZSZMYqsr4LSXaUCQVMhkDbvPmn\nLxcErtRpbjKWpf89PQzNGIrYujhMzODJAOBGTPuHDe4hCWu6sPyizBNzHAwgcolB\nv3CSENcbP/a4ZqDfs/GeGVE=\n-----END PRIVATE KEY-----\n",
-  "client_email": "reef-bot@reef-e23b5.iam.gserviceaccount.com",
-  "client_id": "101105675500933645721",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/reef-bot%40reef-e23b5.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
+  "project_id": "...", 
+  "private_key_id": "...",
+  "client_email": "...",
+  ... (선생님이 붙여넣은 내용이 여기에 있어야 합니다) ...
 }
 """
-# 👆👆👆 [여기까지만 수정하세요] 👆👆👆
 
-# --- 1. 인증 (코드에 있는 키 사용) ---
 def get_creds():
     try:
-        # 입력된 키가 비어있는지 확인
+        # 키가 비어있는지 확인
         if "project_id" not in ROBOT_KEY:
-            st.error("🚨 **코드 위쪽에 있는 'ROBOT_KEY' 부분에 JSON 내용을 붙여넣어 주세요!**")
+            st.error("🚨 **코드 위쪽 'ROBOT_KEY' 부분에 JSON 내용을 붙여넣어 주세요!**")
             st.stop()
-        
-        # 특수문자 등으로 깨진 경우를 대비해 느슨하게 파싱
         return json.loads(ROBOT_KEY, strict=False)
     except json.JSONDecodeError as e:
         st.error(f"🚨 키 형식 오류: {e}")
@@ -45,6 +35,10 @@ def get_creds():
         st.stop()
 
 creds_dict = get_creds()
+
+# 🚨 [긴급 처방] 로봇 이메일 확인 및 초대 안내
+client_email = creds_dict.get("client_email", "확인 불가")
+st.info(f"📢 **[마지막 단계]** 아래 이메일을 복사해서 구글 시트에 **'편집자'**로 초대해주세요!\n\n👉 **{client_email}**")
 
 # --- 2. 구글 시트 연결 ---
 def get_client():
@@ -54,9 +48,15 @@ def get_client():
 
 def get_sheet_tabs():
     client = get_client()
-    try: sh = client.open(SHEET_NAME)
-    except: 
-        st.error(f"🚨 구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다. (공유가 잘 됐는지 확인하세요!)")
+    try: 
+        sh = client.open(SHEET_NAME)
+    except Exception as e:
+        st.error(f"🚨 **구글 시트 '{SHEET_NAME}'를 찾을 수 없습니다!**")
+        st.markdown(f"""
+        **체크리스트:**
+        1. 구글 시트 제목이 띄어쓰기 없이 정확히 **`{SHEET_NAME}`** 인가요?
+        2. 위 파란 박스에 있는 **{client_email}** 주소를 시트 [공유] 버튼 눌러서 추가했나요?
+        """)
         st.stop()
 
     sheet_log = sh.sheet1
@@ -81,7 +81,6 @@ def load_data():
     if len(rows) < 2: return pd.DataFrame(columns=HEADERS)
     
     df = pd.DataFrame(rows[1:], columns=HEADERS)
-    # 삭제를 위해 행 번호 저장
     df['_row_idx'] = range(2, len(df) + 2)
     
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
@@ -98,7 +97,6 @@ def save_data(entry):
 
 def delete_rows_by_indices(row_indices):
     sheet_log, _ = get_sheet_tabs()
-    # 뒤에서부터 지워야 순서가 안 꼬임
     for idx in sorted(row_indices, reverse=True):
         sheet_log.delete_rows(idx)
 
@@ -194,35 +192,28 @@ if not df.empty:
             st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml")
 
     st.divider()
-    st.subheader("📋 전체 기록 관리")
-    
-    # 데이터 준비 (삭제용 체크박스 추가)
+    st.subheader("📋 전체 기록 관리 (체크 후 삭제)")
     df_display = df.sort_values("날짜", ascending=False).copy()
-    df_display.insert(0, "삭제", False) # 맨 앞에 체크박스 컬럼
+    df_display.insert(0, "삭제", False)
+    
+    df_display['Memo'] = df_display['Memo'].apply(lambda x: str(x) if x else "")
 
-    # 에디터 표시
     edited_df = st.data_editor(
         df_display,
         column_config={
-            "삭제": st.column_config.CheckboxColumn("선택", width="small"),
-            "_row_idx": None, # 행 번호 숨김
-            "Memo": st.column_config.TextColumn("메모", width="large") # 메모 바로 보이기
+            "삭제": st.column_config.CheckboxColumn("삭제 선택", default=False), 
+            "_row_idx": None,
+            "Memo": st.column_config.TextColumn("메모", width="large")
         },
-        disabled=HEADERS, # 데이터 수정 금지 (삭제만 가능)
-        hide_index=True,
-        use_container_width=True
+        disabled=HEADERS, hide_index=True, use_container_width=True
     )
-
-    # 삭제 버튼
-    if st.button("🗑️ 체크한 기록 삭제하기", type="primary"):
+    if st.button("🗑️ 선택한 기록 삭제하기", type="primary"):
         rows_to_delete = edited_df[edited_df["삭제"] == True]
-        
         if not rows_to_delete.empty:
             indices = rows_to_delete["_row_idx"].tolist()
             delete_rows_by_indices(indices)
             st.toast(f"{len(indices)}개의 기록을 삭제했습니다!"); st.rerun()
         else:
-            st.warning("먼저 표에서 지울 항목을 체크(☑️)해주세요.")
+            st.warning("먼저 표에서 지울 항목을 체크해주세요.")
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
-
