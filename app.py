@@ -10,39 +10,42 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# --- 1. 인증 (끈질기게 기억하는 버전) ---
+# 👇👇👇 [여기만 고치세요] 👇👇👇
+# 아까 메모장에서 복사한 '로봇 열쇠(JSON)' 내용을
+# 아래 따옴표 3개(""" ... """) 사이에 통째로 붙여넣으세요!
+# (기존에 써있는 예시 글씨는 지우고요!)
+
+ROBOT_KEY = """
+{
+  "type": "service_account",
+  "project_id": "reef-e23b5",
+  "private_key_id": "b3a4d11962e6b31a469f1e26a50aa7e8e85ad1a7",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDOYfNgbwJskSq8\nR23lxBP2JzARFG4myiXkJ6uVA/tuHrTcIrw2SFmKcle5/AeXXc7KMLvHf+VNfMXW\nxeglERw5EL3eHe1UX1ByUGVnWHz8pypsjIdo8LdtRHldgzrz7mrlK1BGnCp+2iqL\n7fo2bnasCug/WoDir2khYZcYMKETF3jQ7YbiRgNWGkXimBrjQtSld4KV0fi2e8PM\nKFmd6Zzw6tIu7VvUAdGmp0fDiLp8Xv3DWIEVarmb40p4CIWXW/4Lc3ZlhXDLe3fI\nRUZCWFHGeNoHtfTBlhAlDZoUkFc2OFsibrcUk2gHvGj7fOeFHGcYFBFwG2JR7Spl\nwXBkFd1tAgMBAAECggEAGdVp/RK4N3XOZyX7zCyIoSHTovevOBzKtG4AzNTkRqsC\nUaHpdFQHHUzlzUqOerSL24RRJQ5N2i65pwI75lPnd/8v/Rs653pM3BpTLyYE8y1L\noq3Oj2S+WSeel4WDPiCEce5DjKskqJ9PfxeJYAHgyfVNkAyYoId7fem025rOttBa\nS/gmDtLPy526xnbsCdWycmIDMQWp/a7l2ELaMf9FikfpjKUL0bNqhcRGZElcSCYU\nQGHmaoK8DnpNox3rmbu37Lb42ppGislhpv12f5WshWYswPlBPrXUo26u7gLgDtcT\n5BRVTfBqaeYv4Co76TKtp9bGgLuonc2LFOh2zVEDcwKBgQDnO32EEn78RR8utMNy\nUTkMxI9fvjkspr/mrTaeFK3kPhm/JQG7D9w2t9KweU+6g6Qt5WeaEq15349ALdCI\nGGBhdntix8hlGmwWoW7ckUa0J5L3lIgPmQmXYWRa6WiH74H31rQrTxP8UUfxeVhQ\nOEYD2OAoTZs52x/iFQhhGJUFOwKBgQDkfRE0qhWd31y49iMYW89inKj88PDYUI11\nkuJ9XMf2AF2V5m+dn0z3AEfwkaVQf7dp4uXokuQ9L4vBWRIxVx9idmPkUiMt1EtU\nGI6flVI1j7XGhAfFHFhAvbDRjP41rDDVcXMyV3U0j8GRmfModTcpo8RSgJEPmAwO\nrdM8NR5ddwKBgQCm1n+rqYTCFEV5d6eFdiFJmxEvrZqnIvFXSScdTCJjioMdLWBg\nTgM/38Y+2miyVIVDMEBeJJfSVYGQdv39FEmGSOyhyzBF8piGg5fvwUpYdi1OQXci\nefM3rGeySLLJUgBeiCWbEgWDikn0au9TgibSY8roiYY0amxIvZA8LnZnPQKBgFIV\nfDDnSYzFyZHJGyKNGRvcG/mCtYOArNEoS6Wtx0hhKT3I4yBFMmkp+K48JJ+ewk2P\n7fh3jPdONW7oiNig6+17irdjqq+0LLuxdstt4XLMhgkjNYdif3ICs5sUg97UVVbY\nwwG62ahgXLHqFKjcM00KQGVDOtnXTb2YROLEUnxRAoGAJRe67TQdzfDYcxdX2JAx\nF+5o5jV4PyUmX7dHxcZHQfwEGUxBnw1OzRRbT4ZSZMYqsr4LSXaUCQVMhkDbvPmn\nLxcErtRpbjKWpf89PQzNGIrYujhMzODJAOBGTPuHDe4hCWu6sPyizBNzHAwgcolB\nv3CSENcbP/a4ZqDfs/GeGVE=\n-----END PRIVATE KEY-----\n",
+  "client_email": "reef-bot@reef-e23b5.iam.gserviceaccount.com",
+  "client_id": "101105675500933645721",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/reef-bot%40reef-e23b5.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
+"""
+
+# --- 1. 무조건 연결 (업로드 X, 설정 X) ---
 def get_creds():
-    # 1. Secrets 먼저 시도
-    if "gcp_service_account" in st.secrets:
-        try:
-            secrets_data = st.secrets["gcp_service_account"]
-            if "info" in secrets_data: return json.loads(secrets_data["info"])
-            else: return dict(secrets_data)
-        except: pass
-    
-    # 2. 업로드했던 파일이 있나 확인 (Session State)
-    if "uploaded_creds" in st.session_state:
-        return st.session_state.uploaded_creds
-        
-    return None
+    try:
+        # 코드에 박힌 키를 읽어옵니다.
+        creds = json.loads(ROBOT_KEY)
+        return creds
+    except json.JSONDecodeError:
+        st.error("🚨 **코드에 열쇠를 안 넣으셨거나, 잘못 붙여넣으셨습니다!**")
+        st.error("app.py 파일 위쪽에 'ROBOT_KEY' 부분을 확인해주세요.")
+        st.stop()
+    except Exception as e:
+        st.error(f"🚨 알 수 없는 오류: {e}")
+        st.stop()
 
 creds_dict = get_creds()
-
-# 인증 파일 없으면 업로더 표시 (하지만 한번 올리면 절대 안 물어봄)
-if creds_dict is None:
-    st.warning("⚠️ **로봇 열쇠 파일(JSON)**을 업로드해주세요.")
-    uploaded_file = st.file_uploader("JSON 파일 드래그 & 드롭", type="json", key="auth_file")
-    
-    if uploaded_file:
-        try:
-            creds = json.load(uploaded_file)
-            if "client_email" in creds:
-                st.session_state.uploaded_creds = creds
-                st.success("✅ 인증 성공! (새로고침 중...)")
-                st.rerun()
-            else: st.error("🚨 올바른 키 파일이 아닙니다.")
-        except: st.error("🚨 파일 읽기 오류")
-    st.stop()
 
 # --- 2. 구글 시트 연결 ---
 def get_client():
@@ -75,11 +78,8 @@ def load_data():
     sheet_log, _ = get_sheet_tabs()
     rows = sheet_log.get_all_values()
     if len(rows) < 2: return pd.DataFrame(columns=HEADERS)
-    
     df = pd.DataFrame(rows[1:], columns=HEADERS)
-    # 삭제를 위해 행 번호 저장 (매우 중요)
     df['_row_idx'] = range(2, len(df) + 2)
-    
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
         if c in df.columns:
@@ -93,9 +93,7 @@ def save_data(entry):
     return True
 
 def delete_rows_by_indices(row_indices):
-    """여러 줄을 한꺼번에 삭제 (뒤에서부터 지워야 번호가 안 밀림)"""
     sheet_log, _ = get_sheet_tabs()
-    # 내림차순 정렬 (큰 숫자부터 지워야 함)
     for idx in sorted(row_indices, reverse=True):
         sheet_log.delete_rows(idx)
 
@@ -196,45 +194,23 @@ if not df.empty:
             st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml")
 
     st.divider()
-    
-    # ---------------------------------------------------------
-    # [새로운 기능] 엑셀처럼 체크해서 삭제하기
-    # ---------------------------------------------------------
     st.subheader("📋 전체 기록 관리 (체크 후 삭제)")
-
-    # 1. '삭제' 체크박스 컬럼 추가 (기본값 False)
     df_display = df.sort_values("날짜", ascending=False).copy()
-    df_display.insert(0, "삭제", False) # 맨 앞에 삭제 컬럼 추가
+    df_display.insert(0, "삭제", False)
 
-    # 2. 엑셀처럼 편집 가능한 표 (data_editor)
     edited_df = st.data_editor(
         df_display,
-        column_config={
-            "삭제": st.column_config.CheckboxColumn(
-                "삭제 선택",
-                help="지우고 싶은 줄을 체크하세요",
-                default=False,
-            ),
-            "_row_idx": None, # 행 번호는 숨김
-        },
-        disabled=HEADERS, # 데이터는 수정 못하게 막음 (삭제만 가능)
-        hide_index=True,
-        use_container_width=True
+        column_config={"삭제": st.column_config.CheckboxColumn("삭제 선택", default=False), "_row_idx": None},
+        disabled=HEADERS, hide_index=True, use_container_width=True
     )
 
-    # 3. 삭제 버튼
     if st.button("🗑️ 선택한 기록 삭제하기", type="primary"):
-        # 체크된 행 찾기
         rows_to_delete = edited_df[edited_df["삭제"] == True]
-        
         if not rows_to_delete.empty:
-            # 구글 시트 행 번호 가져오기
             indices = rows_to_delete["_row_idx"].tolist()
             delete_rows_by_indices(indices)
-            st.toast(f"{len(indices)}개의 기록을 삭제했습니다!")
-            st.rerun()
+            st.toast(f"{len(indices)}개의 기록을 삭제했습니다!"); st.rerun()
         else:
-            st.warning("먼저 표에서 지울 항목을 체크(☑️)해주세요.")
-
+            st.warning("먼저 표에서 지울 항목을 체크해주세요.")
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
