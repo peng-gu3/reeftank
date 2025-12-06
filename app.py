@@ -10,13 +10,14 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# 👇👇👇 [여기에 JSON 키를 붙여넣으세요] 👇👇👇
-ROBOT_KEY = """
+# 👇👇👇 [여기에 '새로 받은' 키를 붙여넣으세요] 👇👇👇
+# 주의: r""" 과 """ 사이의 내용을 지우고 붙여넣으세요.
+ROBOT_KEY = r"""
 {
   "type": "service_account",
   "project_id": "reef-e23b5",
-  "private_key_id": "b3a4d11962e6b31a469f1e26a50aa7e8e85ad1a7",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDOYfNgbwJskSq8\nR23lxBP2JzARFG4myiXkJ6uVA/tuHrTcIrw2SFmKcle5/AeXXc7KMLvHf+VNfMXW\nxeglERw5EL3eHe1UX1ByUGVnWHz8pypsjIdo8LdtRHldgzrz7mrlK1BGnCp+2iqL\n7fo2bnasCug/WoDir2khYZcYMKETF3jQ7YbiRgNWGkXimBrjQtSld4KV0fi2e8PM\nKFmd6Zzw6tIu7VvUAdGmp0fDiLp8Xv3DWIEVarmb40p4CIWXW/4Lc3ZlhXDLe3fI\nRUZCWFHGeNoHtfTBlhAlDZoUkFc2OFsibrcUk2gHvGj7fOeFHGcYFBFwG2JR7Spl\nwXBkFd1tAgMBAAECggEAGdVp/RK4N3XOZyX7zCyIoSHTovevOBzKtG4AzNTkRqsC\nUaHpdFQHHUzlzUqOerSL24RRJQ5N2i65pwI75lPnd/8v/Rs653pM3BpTLyYE8y1L\noq3Oj2S+WSeel4WDPiCEce5DjKskqJ9PfxeJYAHgyfVNkAyYoId7fem025rOttBa\nS/gmDtLPy526xnbsCdWycmIDMQWp/a7l2ELaMf9FikfpjKUL0bNqhcRGZElcSCYU\nQGHmaoK8DnpNox3rmbu37Lb42ppGislhpv12f5WshWYswPlBPrXUo26u7gLgDtcT\n5BRVTfBqaeYv4Co76TKtp9bGgLuonc2LFOh2zVEDcwKBgQDnO32EEn78RR8utMNy\nUTkMxI9fvjkspr/mrTaeFK3kPhm/JQG7D9w2t9KweU+6g6Qt5WeaEq15349ALdCI\nGGBhdntix8hlGmwWoW7ckUa0J5L3lIgPmQmXYWRa6WiH74H31rQrTxP8UUfxeVhQ\nOEYD2OAoTZs52x/iFQhhGJUFOwKBgQDkfRE0qhWd31y49iMYW89inKj88PDYUI11\nkuJ9XMf2AF2V5m+dn0z3AEfwkaVQf7dp4uXokuQ9L4vBWRIxVx9idmPkUiMt1EtU\nGI6flVI1j7XGhAfFHFhAvbDRjP41rDDVcXMyV3U0j8GRmfModTcpo8RSgJEPmAwO\nrdM8NR5ddwKBgQCm1n+rqYTCFEV5d6eFdiFJmxEvrZqnIvFXSScdTCJjioMdLWBg\nTgM/38Y+2miyVIVDMEBeJJfSVYGQdv39FEmGSOyhyzBF8piGg5fvwUpYdi1OQXci\nefM3rGeySLLJUgBeiCWbEgWDikn0au9TgibSY8roiYY0amxIvZA8LnZnPQKBgFIV\nfDDnSYzFyZHJGyKNGRvcG/mCtYOArNEoS6Wtx0hhKT3I4yBFMmkp+K48JJ+ewk2P\n7fh3jPdONW7oiNig6+17irdjqq+0LLuxdstt4XLMhgkjNYdif3ICs5sUg97UVVbY\nwwG62ahgXLHqFKjcM00KQGVDOtnXTb2YROLEUnxRAoGAJRe67TQdzfDYcxdX2JAx\nF+5o5jV4PyUmX7dHxcZHQfwEGUxBnw1OzRRbT4ZSZMYqsr4LSXaUCQVMhkDbvPmn\nLxcErtRpbjKWpf89PQzNGIrYujhMzODJAOBGTPuHDe4hCWu6sPyizBNzHAwgcolB\nv3CSENcbP/a4ZqDfs/GeGVE=\n-----END PRIVATE KEY-----\n",
+  "private_key_id": "a3db100b2e8713ec7203c01aced520c3a2579c32",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDNlmVkNAzzoHqF\n8mU8kca+LpojNkla/smujOLS0iCuL5hMn/WKCDV3TLJZTUTvBLlL5qYulU3SUuhb\nolQaDiNQhg0bHMxcQ+Fnt0VbDYJ1CyeJ6BxTkRYbaPUnG27IFDa7WN74VRW0F9af\nTomt6GyZjo9q2F47n0vUUxSdXJlE+ngYYw0/vpdwbP0xD4ItRiNMhdXd9RruAoHu\nfwgNbnqTbu5GSrdMBVta4ChpdsrYXHbNXgDimnpahvDns6TeTUydNthFvEy+bO4A\n5oluy+jcfKyyyBXJeroIc+YgY6dm1rJ2faaQ1vCKF6v54zkbW3EAixqtbV+LNn9N\nB8F+yvtxAgMBAAECggEAHhoAAP61CcPsxKmD5K00hBqnM3IqpfHp3k6fFH6zTcXG\nvytppHsEtxHKCFTNu9B9gA1GtknioeHFR0t6lHEO/yaNizN5gaXnvkuhkk4lVJVc\nRe8wHJVA/yTsRjxYSV/aTq6ZwRMWMS8PW/aAJrBCHG649Yw2KfUuQWmjulG5WFWv\n6wWbVzgYSD1fnRmNIMEyFQiry1Jshw04WtgR5xISrfGFiiLxjqvObGfAesqUp8fM\n+QjzqCDAdKqOzo4h+QnYH8uHhYbVh5TmgzITfS6BSM9JKSJH6oUbewbRtDDzGw9P\nL3zYgTcDZTWiDKabNQjsUB4CYdNz+wAS8rRiCu1aBQKBgQDlafoKQVcFapO/JC2s\nRZYGnfxvdCtYayCInDuSY7BvMCd/0DfzfoSi8sZU6jPx6ockb6X8IZoKE+Uk1Z+R\ny/WENnG3ugToJbf7KX8lrdcvn7W6GApEP5uuAir/ECKqa3qglXBTZTTdw7+/AYHv\n3XnP7W2GjZLZ4Z3+xB4ngqiBpQKBgQDlaY8eb+4MxmINs/VZ+a/xZzYzfaoYsl0h\nhHYJEjxmgflS85UoTCmbHVz1fbLl/eo3stvIWgnftRm+iqdFsjfzeFqNL4oXZd2+\ngJpjJzwW4/Zt8qfBCxFehi/OKl/p+tktvlevRrmAMoEA7MHkhSEie/XEhglcgWjo\nuF1cB3nQ3QKBgBSapghRwf0Mi2R5XVjBjy3c9pUT++ifBnb+gSMurOPvkTybeMr3\nq/Xuk/2AY1Xw2F5fYKr6YZlSHBxoy0IO7WgIc8IqhNJMwO9f1LmPmWn/kBS8n/9t\nLxA7xZzO2C4yJPtTMJls14irUgdXnVHrtEsGafXRtUS4TLZa6tJlm7i5AoGAQxni\nC7QPe9sW2Q03CW834DMhLmRmOT0KcoBNChA0bIM9yt6GVTgZv04SX5e5mP3w4QPG\nt05mrvFIq2vgy0j6hpNAYSVzja508oCpJ7FVKRjafoRIPvWeyfgTyYipb0W4+mE/\nQnw8S9v50axudgnejDiXxTizSkRrzA4I+J8TKV0CgYAb+05GGZitdM2/+mwbznU7\nDPO/j+MfQwFcdSpD2nIWoRolGDSe12laED3KVVuQ7MLjKRNiypUkpfYN+o8FPrB3\n4wwgf30tzckJ6XNFUQTui3NeXjfqtd7IFSX05+tR50hzclZa8QextzR9iFEZLbe2\nviAcwOziMY+edSmPwQk6oQ==\n-----END PRIVATE KEY-----\n",
   "client_email": "reef-bot@reef-e23b5.iam.gserviceaccount.com",
   "client_id": "101105675500933645721",
   "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -28,42 +29,38 @@ ROBOT_KEY = """
 """
 # 👆👆👆 [여기까지만 수정하세요] 👆👆👆
 
-# --- 1. 인증 (자동 수리 기능 탑재) ---
+# --- 1. 인증 (초강력 버전) ---
 def get_creds():
     try:
         # 키가 비어있는지 확인
         if "project_id" not in ROBOT_KEY or "..." in ROBOT_KEY:
-            st.error("🚨 **코드 위쪽 'ROBOT_KEY' 부분에 JSON 내용을 붙여넣어 주세요!**")
+            st.error("🚨 **코드 위쪽 'ROBOT_KEY' 부분에 '새로 받은 키'를 붙여넣어 주세요!**")
             st.stop()
         
         # 1. JSON 읽기
-        creds = json.loads(ROBOT_KEY, strict=False)
-        
-        # 2. [핵심] 깨진 비밀번호 자동 수리 (이게 에러를 고칩니다!)
+        try:
+            creds = json.loads(ROBOT_KEY, strict=False)
+        except json.JSONDecodeError:
+            # 혹시 r string 때문에 백슬래시가 두 개면 하나로 줄임
+            fixed_key = ROBOT_KEY.replace('\\"', '"')
+            creds = json.loads(fixed_key, strict=False)
+
+        # 2. 비밀번호(Private Key) 자동 수리
         if "private_key" in creds:
             pk = creds["private_key"]
-            # 1) 가짜 줄바꿈(\\n)을 진짜 줄바꿈(\n)으로 변경
+            # 줄바꿈 문자(\n)가 깨졌으면 복구
             pk = pk.replace("\\n", "\n")
-            # 2) 혹시 앞뒤에 이상한 공백이 있으면 제거
-            pk = pk.strip()
-            # 3) 헤더가 깨졌으면 복구
-            if "-----BEGIN PRIVATE KEY----- " in pk:
-                pk = pk.replace("-----BEGIN PRIVATE KEY----- ", "-----BEGIN PRIVATE KEY-----\n")
-            if " -----END PRIVATE KEY-----" in pk:
-                pk = pk.replace(" -----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----")
-            
             creds["private_key"] = pk
             
         return creds
         
-    except json.JSONDecodeError as e:
-        st.error(f"🚨 키 형식 오류: {e}")
-        st.info("메모장에서 { 괄호부터 } 괄호까지 빠짐없이 복사했는지 확인해주세요.")
+    except Exception as e:
+        st.error(f"🚨 키 처리 오류: {e}")
         st.stop()
 
 creds_dict = get_creds()
 
-# --- 2. 구글 시트 연결 (주소/이름 모두 시도) ---
+# --- 2. 구글 시트 연결 ---
 def get_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -72,14 +69,12 @@ def get_client():
 def get_sheet_tabs():
     client = get_client()
     sh = None
-    
-    # 1. 이름으로 찾기
     try: sh = client.open(SHEET_NAME)
     except: pass
 
-    # 2. 실패하면 주소 입력창 띄우기
+    # 이름으로 못 찾으면 주소 입력창 띄움
     if sh is None:
-        st.warning(f"⚠️ '{SHEET_NAME}' 파일을 못 찾았습니다. (초대는 하셨죠?)")
+        st.warning(f"⚠️ '{SHEET_NAME}' 시트를 못 찾았습니다.")
         sheet_url = st.text_input("👇 구글 시트 인터넷 주소(URL)를 여기에 붙여넣고 엔터!", key="url")
         if sheet_url:
             try:
@@ -87,6 +82,7 @@ def get_sheet_tabs():
                 st.success("✅ 주소로 연결 성공!")
             except Exception as e:
                 st.error(f"🚨 연결 실패: {e}")
+                st.info(f"로봇 이메일: **{creds_dict.get('client_email')}** (이 주소를 초대했는지 확인하세요!)")
                 st.stop()
         else:
             st.stop()
