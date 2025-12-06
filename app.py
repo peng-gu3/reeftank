@@ -10,32 +10,42 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# --- 1. 인증 및 연결 (파일 업로드 방식) ---
+# --- 1. 인증 및 연결 ---
 def get_creds():
+    # Secrets 먼저 확인
     if "gcp_service_account" in st.secrets:
         try:
             secrets_data = st.secrets["gcp_service_account"]
             if "info" in secrets_data: return json.loads(secrets_data["info"])
             else: return dict(secrets_data)
         except: pass
+    # 업로드된 파일 확인 (세션 저장소)
     if "uploaded_creds" in st.session_state: return st.session_state.uploaded_creds
     return None
 
 creds_dict = get_creds()
 
+# 인증 파일 없으면 업로더 표시
 if creds_dict is None:
     st.warning("⚠️ **로봇 열쇠 파일(JSON)**을 업로드해주세요.")
     uploaded_file = st.file_uploader("JSON 파일 드래그 & 드롭", type="json", key="auth")
+    
     if uploaded_file:
+        # [핵심 수정] 파일 읽는 부분과 새로고침 부분을 분리하여 에러 방지
+        creds = None
         try:
             creds = json.load(uploaded_file)
-            if "client_email" in creds:
-                st.session_state.uploaded_creds = creds
-                st.success("✅ 인증 성공! (새로고침 중...)")
-                st.rerun()
-            else: st.error("🚨 올바른 키 파일이 아닙니다.")
-        except: st.error("🚨 파일 읽기 오류")
-    st.stop()
+        except Exception as e:
+            st.error(f"🚨 파일 읽기 오류: {e}")
+            st.stop()
+            
+        if creds and "client_email" in creds:
+            st.session_state.uploaded_creds = creds
+            st.success("✅ 인증 성공! (잠시만 기다리세요...)")
+            st.rerun() # 이제 여기서 에러 안 남!
+        else:
+            st.error("🚨 올바른 키 파일이 아닙니다.")
+    st.stop() # 인증 전에는 아래 코드 실행 막기
 
 # --- 2. 구글 시트 연결 ---
 def get_client():
@@ -64,7 +74,7 @@ def get_sheet_tabs():
     except: sheet_config = sh.add_worksheet(title="Config", rows=20, cols=5)
     return sheet_log, sheet_config
 
-# --- 3. 데이터 읽기/쓰기/삭제 ---
+# --- 3. 데이터 관리 ---
 def load_data():
     sheet_log, _ = get_sheet_tabs()
     rows = sheet_log.get_all_values()
@@ -83,12 +93,10 @@ def save_data(entry):
     return True
 
 def delete_data(row_index):
-    """지정한 줄(row_index)을 시트에서 삭제합니다."""
     sheet_log, _ = get_sheet_tabs()
-    # 시트는 1부터 시작하고, 헤더가 1번째 줄이므로 데이터는 index + 2 번째 줄임
     sheet_log.delete_rows(row_index + 2)
 
-# --- 4. 설정 읽기/쓰기 ---
+# --- 4. 설정 관리 ---
 def load_config():
     _, sheet_config = get_sheet_tabs()
     records = sheet_config.get_all_records()
@@ -113,6 +121,7 @@ def draw_radar(cats, vals, t_vals, title, color):
     cats=[*cats,cats[0]]; norm_vals=[*norm_vals,norm_vals[0]]; txt_vals=[*txt_vals,""]
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(r=[1]*len(cats), theta=cats, line_color="white", line_dash='dot', name='목표'))
+    # textfont, angularaxis에서 weight 속성 제거 (에러 원천 차단)
     fig.add_trace(go.Scatterpolar(r=norm_vals, theta=cats, fill='toself', line_color=color, mode='lines+markers+text', text=txt_vals, textfont=dict(color=color)))
     fig.update_layout(polar=dict(radialaxis=dict(visible=False, range=[0,1.5]), angularaxis=dict(tickfont=dict(color="#00BFFF", size=12)), bgcolor="rgba(0,0,0,0)"), paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#00BFFF"), height=350, margin=dict(t=40,b=40))
     return fig
@@ -123,7 +132,6 @@ st.title("🌊 My Triton Manager (Cloud)")
 if "config" not in st.session_state: st.session_state.config = load_config()
 cfg = st.session_state.config
 
-# 사이드바
 with st.sidebar:
     st.header("⚙️ 수조 & 목표 설정")
     volume = st.number_input("물량 (L)", value=float(cfg["volume"]), step=0.1)
@@ -145,7 +153,6 @@ with st.sidebar:
 
 st.success("✅ 구글 시트 연결됨")
 
-# 기록 입력창
 with st.expander("📝 새 기록 입력하기", expanded=False):
     with st.form("entry"):
         c1,c2,c3,c4 = st.columns(4)
@@ -169,8 +176,6 @@ df = load_data()
 
 if not df.empty:
     last = df.iloc[-1]
-    
-    # 1. 그래프 및 AI 분석 (상단 배치)
     g1,g2 = st.columns([1.2, 0.8])
     with g1:
         c1,c2 = st.columns(2)
@@ -189,52 +194,28 @@ if not df.empty:
             st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml (현재 {base_dose}ml)")
 
     st.divider()
-    
-    # 2. 기록 관리 (보기 및 삭제) - 선생님 요청 기능!
     st.subheader("📋 전체 기록 관리")
-    
-    # 화면 표시용 데이터 만들기 (메모는 O/X로 표시)
     df_display = df.copy()
-    # 메모가 있으면 '📝있음', 없으면 빈칸으로 바꿔서 보여줌
     df_display['Memo'] = df_display['Memo'].apply(lambda x: "📝있음" if x and str(x).strip() != "" else "")
-    
-    # 메인 표 보여주기
     st.dataframe(df_display.sort_values("날짜", ascending=False), use_container_width=True)
     
-    # [상세 보기 및 삭제 구역]
     st.markdown("### 🔍 기록 상세 보기 & 삭제")
-    
-    # 선택 상자 만들기 (날짜와 KH수치로 구분)
-    # 최신순으로 정렬된 인덱스 리스트 생성
     sorted_indices = df.sort_values("날짜", ascending=False).index
-    
-    selected_idx = st.selectbox(
-        "확인하거나 삭제할 기록을 선택하세요:",
-        options=sorted_indices,
-        format_func=lambda i: f"{df.loc[i, '날짜']} (KH: {df.loc[i, 'KH']}, 기록 #{i+1})"
-    )
-    
-    # 선택된 기록 가져오기
-    if selected_idx is not None:
-        sel_row = df.loc[selected_idx]
-        
-        # 상세 내용 보여주기 (카드 형태)
-        with st.container(border=True):
-            col_a, col_b = st.columns([3, 1])
-            with col_a:
-                st.markdown(f"**📅 날짜:** {sel_row['날짜']} / **🧪 KH:** {sel_row['KH']} / **💧 도징량:** {sel_row['도징량']}ml")
-                # 여기서 전체 메모를 보여줌!
-                full_memo = sel_row['Memo'] if sel_row['Memo'] else "(메모 없음)"
-                st.info(f"**📝 메모 내용:**\n\n{full_memo}")
-                
-            with col_b:
-                st.write("") # 여백
-                st.write("")
-                # 삭제 버튼 (빨간색)
-                if st.button("🗑️ 이 기록 삭제", type="primary", key=f"del_{selected_idx}"):
-                    delete_data(selected_idx)
-                    st.toast("기록이 삭제되었습니다.")
-                    st.rerun()
-
+    if not sorted_indices.empty:
+        selected_idx = st.selectbox("확인/삭제할 기록 선택:", options=sorted_indices, format_func=lambda i: f"{df.loc[i, '날짜']} (KH: {df.loc[i, 'KH']}, #{i+1})")
+        if selected_idx is not None:
+            sel_row = df.loc[selected_idx]
+            with st.container(border=True):
+                col_a, col_b = st.columns([3, 1])
+                with col_a:
+                    st.markdown(f"**📅 날짜:** {sel_row['날짜']} / **🧪 KH:** {sel_row['KH']} / **💧 도징량:** {sel_row['도징량']}ml")
+                    full_memo = sel_row['Memo'] if sel_row['Memo'] else "(메모 없음)"
+                    st.info(f"**📝 메모 내용:**\n\n{full_memo}")
+                with col_b:
+                    st.write("")
+                    st.write("")
+                    if st.button("🗑️ 이 기록 삭제", type="primary", key=f"del_{selected_idx}"):
+                        delete_data(selected_idx)
+                        st.toast("기록이 삭제되었습니다."); st.rerun()
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
