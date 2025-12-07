@@ -10,52 +10,18 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# 👇👇👇 [여기에 선생님의 JSON 키를 붙여넣으세요] 👇👇👇
-ROBOT_KEY = """
-{
-  "type": "service_account",
-  "project_id": "...",
-  "private_key_id": "...",
-  "private_key": "...",
-  "client_email": "...",
-  "client_id": "...",
-  "auth_uri": "...",
-  "token_uri": "...",
-  "auth_provider_x509_cert_url": "...",
-  "client_x509_cert_url": "...",
-  "universe_domain": "googleapis.com"
-}
-"""
-# 👆👆👆 [여기까지만 수정하세요] 👆👆👆
-
-# --- 1. 인증 (자동 수리 기능 탑재) ---
+# --- 1. 인증 (금고에서 안전하게 꺼내오기) ---
 def get_creds():
-    try:
-        if "project_id" not in ROBOT_KEY or "..." in ROBOT_KEY:
-            st.error("🚨 **코드 위쪽 'ROBOT_KEY' 부분에 JSON 내용을 붙여넣어 주세요!**")
-            st.stop()
-        
-        creds = json.loads(ROBOT_KEY, strict=False)
-        
-        # 비밀번호 줄바꿈 수리
-        if "private_key" in creds:
-            pk = creds["private_key"]
-            pk = pk.replace("\\n", "\n").strip()
-            if "-----BEGIN PRIVATE KEY----- " in pk:
-                pk = pk.replace("-----BEGIN PRIVATE KEY----- ", "-----BEGIN PRIVATE KEY-----\n")
-            if " -----END PRIVATE KEY-----" in pk:
-                pk = pk.replace(" -----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----")
-            creds["private_key"] = pk
-            
-        return creds
-        
-    except json.JSONDecodeError as e:
-        st.error(f"🚨 키 형식 오류: {e}")
-        st.stop()
+    # Streamlit Secrets(금고)에서 'gcp_service_account'라는 이름의 보따리를 찾음
+    if "gcp_service_account" in st.secrets:
+        return dict(st.secrets["gcp_service_account"])
+    
+    st.error("🚨 인증 정보를 찾을 수 없습니다! Streamlit 배포 화면의 [Settings] > [Secrets] 설정을 확인해주세요.")
+    st.stop()
 
 creds_dict = get_creds()
 
-# --- 2. 구글 시트 연결 (주소/이름 모두 시도) ---
+# --- 2. 구글 시트 연결 ---
 def get_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -64,17 +30,13 @@ def get_client():
 def get_sheet_tabs():
     client = get_client()
     sh = None
-    
-    # 1. 이름으로 찾기
     try: sh = client.open(SHEET_NAME)
     except: pass
 
-    # 2. 실패하면 주소 입력창 띄우기
+    # 이름으로 못 찾으면 주소 입력창
     if sh is None:
-        # 이전에 입력한 주소가 있으면 자동 연결 시도
         if 'sheet_url' in st.session_state:
-            try:
-                sh = client.open_by_url(st.session_state['sheet_url'])
+            try: sh = client.open_by_url(st.session_state['sheet_url'])
             except: pass
 
     if sh is None:
@@ -83,7 +45,7 @@ def get_sheet_tabs():
         if sheet_url:
             try:
                 sh = client.open_by_url(sheet_url)
-                st.session_state['sheet_url'] = sheet_url # 주소 기억
+                st.session_state['sheet_url'] = sheet_url
                 st.success("✅ 주소로 연결 성공! (잠시만 기다리세요)")
                 st.rerun()
             except Exception as e:
@@ -113,9 +75,7 @@ def load_data():
     rows = sheet_log.get_all_values()
     if len(rows) < 2: return pd.DataFrame(columns=HEADERS)
     df = pd.DataFrame(rows[1:], columns=HEADERS)
-    # 실제 행 번호 저장 (삭제용)
     df['_row_idx'] = range(2, len(df) + 2)
-    
     cols_to_num = ["KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량"]
     for c in cols_to_num:
         if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
@@ -129,9 +89,7 @@ def save_data(entry):
 
 def delete_rows_by_indices(row_indices):
     sheet_log, _ = get_sheet_tabs()
-    # 뒤에서부터 지워야 순서가 안 꼬임
-    for idx in sorted(row_indices, reverse=True):
-        sheet_log.delete_rows(idx)
+    for idx in sorted(row_indices, reverse=True): sheet_log.delete_rows(idx)
 
 # --- 4. 설정 관리 ---
 def load_config():
@@ -224,53 +182,28 @@ if not df.empty:
             st.warning(f"📈 KH 과다. 추천: {max(0, base_dose-sub):.2f}ml")
 
     st.divider()
-    
-    # ------------------------------------------------------------------
-    # [수정된 부분] 엑셀형 목록 + 체크박스 삭제 기능
-    # ------------------------------------------------------------------
-    st.subheader("📋 전체 기록 관리")
-    
-    # 1. 데이터 준비: 최신순 정렬
+    st.subheader("📋 전체 기록 관리 (체크 후 삭제)")
     df_display = df.sort_values("날짜", ascending=False).copy()
-    
-    # 2. '삭제' 체크박스 컬럼 추가 (맨 앞에)
     df_display.insert(0, "삭제", False)
     
-    # 3. 메모: 내용이 있으면 그대로 보여줌 (없으면 빈칸)
     df_display['Memo'] = df_display['Memo'].apply(lambda x: str(x) if x else "")
 
-    # 4. 엑셀 스타일 표 출력 (data_editor 사용)
     edited_df = st.data_editor(
         df_display,
         column_config={
-            "삭제": st.column_config.CheckboxColumn(
-                "삭제",
-                help="지우고 싶은 줄을 체크하세요",
-                width="small",
-                default=False,
-            ),
-            "_row_idx": None, # 행 번호는 숨김 (시스템용)
-            "Memo": st.column_config.TextColumn("메모", width="large") # 메모 칸 넓게
+            "삭제": st.column_config.CheckboxColumn("삭제 선택", default=False), 
+            "_row_idx": None,
+            "Memo": st.column_config.TextColumn("메모", width="large")
         },
-        disabled=HEADERS, # 데이터 내용은 수정 불가 (삭제 체크만 가능)
-        hide_index=True,
-        use_container_width=True,
-        key="data_editor"
+        disabled=HEADERS, hide_index=True, use_container_width=True
     )
-
-    # 5. 삭제 버튼 (표 바로 아래)
     if st.button("🗑️ 선택한 기록 삭제하기", type="primary"):
-        # 체크된 행 찾기
         rows_to_delete = edited_df[edited_df["삭제"] == True]
-        
         if not rows_to_delete.empty:
-            # 구글 시트 행 번호 가져오기
             indices = rows_to_delete["_row_idx"].tolist()
             delete_rows_by_indices(indices)
-            st.toast(f"{len(indices)}개의 기록을 삭제했습니다!")
-            st.rerun()
+            st.toast(f"{len(indices)}개의 기록을 삭제했습니다!"); st.rerun()
         else:
-            st.warning("먼저 표에서 지울 항목을 체크(☑️)해주세요.")
-
+            st.warning("먼저 표에서 지울 항목을 체크해주세요.")
 else:
     st.info("👋 기록이 없습니다. 데이터를 입력해주세요!")
