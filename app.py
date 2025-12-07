@@ -10,13 +10,16 @@ st.set_page_config(page_title="My Triton Lab Pro", page_icon="🐠", layout="wid
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# --- 1. 인증 (금고에서 안전하게 꺼내오기) ---
+# --- 1. 인증 (오직 Secrets만 사용) ---
 def get_creds():
-    # Streamlit Secrets(금고)에서 'gcp_service_account'라는 이름의 보따리를 찾음
+    # Streamlit Secrets에서 'gcp_service_account' 섹션을 찾습니다.
     if "gcp_service_account" in st.secrets:
+        # TOML 내용을 딕셔너리로 가져옵니다.
         return dict(st.secrets["gcp_service_account"])
     
-    st.error("🚨 인증 정보를 찾을 수 없습니다! Streamlit 배포 화면의 [Settings] > [Secrets] 설정을 확인해주세요.")
+    # Secrets가 없으면 에러 표시 (파일 업로드 창 안 띄움)
+    st.error("🚨 인증 정보가 없습니다!")
+    st.info("내 컴퓨터에서는 `.streamlit/secrets.toml` 파일이 있는지, 배포 환경에서는 [Settings] > [Secrets]에 키가 있는지 확인해주세요.")
     st.stop()
 
 creds_dict = get_creds()
@@ -33,7 +36,7 @@ def get_sheet_tabs():
     try: sh = client.open(SHEET_NAME)
     except: pass
 
-    # 이름으로 못 찾으면 주소 입력창
+    # 이름으로 못 찾으면 주소 입력창 (이건 살려둠, 혹시 모르니까요)
     if sh is None:
         if 'sheet_url' in st.session_state:
             try: sh = client.open_by_url(st.session_state['sheet_url'])
@@ -41,18 +44,16 @@ def get_sheet_tabs():
 
     if sh is None:
         st.warning(f"⚠️ '{SHEET_NAME}' 파일을 못 찾았습니다.")
-        sheet_url = st.text_input("👇 구글 시트 인터넷 주소(URL)를 여기에 붙여넣고 엔터!", key="url_input")
+        sheet_url = st.text_input("👇 구글 시트 URL을 입력하세요 (한 번만 입력하면 됩니다)", key="url_input")
         if sheet_url:
             try:
                 sh = client.open_by_url(sheet_url)
                 st.session_state['sheet_url'] = sheet_url
-                st.success("✅ 주소로 연결 성공! (잠시만 기다리세요)")
+                st.success("✅ 연결 성공!")
                 st.rerun()
             except Exception as e:
-                st.error(f"🚨 연결 실패: {e}")
-                st.stop()
-        else:
-            st.stop()
+                st.error(f"🚨 연결 실패: {e}"); st.stop()
+        else: st.stop()
 
     sheet_log = sh.sheet1
     if sheet_log.title != "Logs": 
@@ -89,7 +90,8 @@ def save_data(entry):
 
 def delete_rows_by_indices(row_indices):
     sheet_log, _ = get_sheet_tabs()
-    for idx in sorted(row_indices, reverse=True): sheet_log.delete_rows(idx)
+    for idx in sorted(row_indices, reverse=True):
+        sheet_log.delete_rows(idx)
 
 # --- 4. 설정 관리 ---
 def load_config():
