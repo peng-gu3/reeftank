@@ -7,89 +7,89 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="My Triton Lab", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="My Reef Manager", page_icon="🐠", layout="wide")
 
 # --- 🎨 디자인 (Deep Navy & Neon) ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+    html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
+    .stApp { background-color: #F0F4F8; }
     
-    html, body, [class*="css"] {
-        font-family: 'Pretendard', sans-serif !important;
-        color: #eef6ff !important;
-    }
+    /* 제목 및 텍스트 */
+    h1, h2, h3 { color: #1A237E !important; font-weight: 700 !important; }
     
-    /* 배경 (Deep Navy) */
-    .stApp {
-        background-color: #0c1236 !important;
-        background-image: radial-gradient(circle at 18% 22%, #1c3f8d 0%, #0c1236 45%) !important;
-        background-attachment: fixed !important;
-    }
-
-    /* 카드 박스 */
-    [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
-        background-color: rgba(16, 36, 74, 0.7) !important;
-        border: 1px solid rgba(75, 232, 255, 0.1) !important;
-        border-radius: 16px !important;
-        padding: 20px !important;
-        backdrop-filter: blur(10px);
-    }
-
-    /* 텍스트 색상 */
-    h1, h2, h3 { color: #4be8ff !important; text-shadow: 0 0 10px rgba(75, 232, 255, 0.3) !important; }
-    p, label, span, div { color: #eef6ff; }
-
-    /* 입력창 */
-    .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {
-        background-color: rgba(0, 0, 0, 0.3) !important;
-        color: #4be8ff !important;
-        border: 1px solid rgba(75, 232, 255, 0.2) !important;
-        border-radius: 8px !important;
+    /* 카드 박스 (게시글 스타일) */
+    .log-card {
+        background-color: #FFFFFF;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        border: 1px solid #E0E0E0;
+        margin-bottom: 15px;
     }
     
-    /* 버튼 */
+    /* 중요 수치 강조 */
+    .metric-value {
+        font-size: 1.1em;
+        font-weight: bold;
+        color: #004D40;
+    }
+    
+    /* 버튼 스타일 */
     .stButton > button {
-        background: linear-gradient(135deg, #4be8ff, #1c3f8d) !important;
+        background-color: #00897B !important;
+        color: white !important;
+        border-radius: 8px !important;
+        border: none !important;
+    }
+    
+    /* 삭제 버튼 (빨간색) */
+    div[data-testid="column"] button[kind="secondary"] {
+        background-color: #FF5252 !important;
         color: white !important;
         border: none !important;
-        font-weight: bold !important;
-        border-radius: 8px !important;
     }
 
-    /* 사이드바 */
-    [data-testid="stSidebar"] {
-        background-color: #080c24 !important;
-        border-right: 1px solid #2a416a !important;
-    }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        color: #4be8ff !important;
-    }
+    [data-testid="stSidebar"] { background-color: #E0F7FA; border-right: 1px solid #B2EBF2; }
 </style>
 """, unsafe_allow_html=True)
 
 SHEET_NAME = "MyReefLog"
 HEADERS = ["날짜","KH","Ca","Mg","NO2","NO3","PO4","pH","Temp","Salinity","도징량","Memo"]
 
-# --- 1. 인증 (오직 Secrets만 사용 - 코드에 키 없음!) ---
+# 👇👇👇 [여기에 JSON 키를 붙여넣으세요] 👇👇👇
+ROBOT_KEY = """
+{
+  "type": "service_account",
+  "project_id": "...",
+  "private_key_id": "...",
+  "private_key": "...",
+  "client_email": "...",
+  "client_id": "...",
+  "auth_uri": "...",
+  "token_uri": "...",
+  "auth_provider_x509_cert_url": "...",
+  "client_x509_cert_url": "...",
+  "universe_domain": "googleapis.com"
+}
+"""
+# 👆👆👆 [여기까지만 수정하세요] 👆👆👆
+
+# --- 1. 인증 ---
 def get_creds():
-    # Streamlit Secrets에서 설정 확인
-    if "gcp_service_account" not in st.secrets:
-        st.error("🚨 **Secrets 설정이 없습니다!**")
-        st.info("내 컴퓨터: `.streamlit/secrets.toml` 파일 확인\n서버 배포: [Settings] > [Secrets] 확인")
-        st.stop()
-
-    secrets_data = st.secrets["gcp_service_account"]
-
-    # 1) 'info' 키에 JSON 전체를 넣은 경우
-    if "info" in secrets_data:
-        try:
-            return json.loads(secrets_data["info"], strict=False)
-        except json.JSONDecodeError:
-            st.error("🚨 Secrets의 JSON 형식이 잘못되었습니다.")
+    try:
+        if "project_id" not in ROBOT_KEY or "..." in ROBOT_KEY:
+            st.error("🚨 **코드 위쪽 'ROBOT_KEY' 부분에 JSON 내용을 붙여넣어 주세요!**")
             st.stop()
-    
-    # 2) 개별 키값으로 넣은 경우
-    return dict(secrets_data)
+        
+        creds = json.loads(ROBOT_KEY, strict=False)
+        if "private_key" in creds:
+            creds["private_key"] = creds["private_key"].replace("\\n", "\n").strip()
+        return creds
+    except json.JSONDecodeError:
+        st.error("🚨 키 형식이 잘못되었습니다.")
+        st.stop()
 
 creds_dict = get_creds()
 
@@ -106,10 +106,9 @@ def get_sheet_tabs():
         if 'sheet_url' in st.session_state:
             try: sh = client.open_by_url(st.session_state['sheet_url'])
             except: pass
-        
         if 'sh' not in locals() or sh is None:
             st.warning(f"⚠️ '{SHEET_NAME}' 시트를 못 찾았습니다.")
-            url = st.text_input("👇 구글 시트 URL 입력 (최초 1회):", key="url_input")
+            url = st.text_input("👇 구글 시트 URL 입력:", key="url_input")
             if url:
                 try: sh = client.open_by_url(url); st.session_state['sheet_url']=url; st.success("연결됨!"); st.rerun()
                 except: st.error("연결 실패"); st.stop()
@@ -142,15 +141,15 @@ def save_data(entry):
     sheet_log.append_row(row)
     return True
 
-def delete_rows(indices):
+def delete_row(row_idx):
     sheet_log, _ = get_sheet_tabs()
-    for idx in sorted(indices, reverse=True): sheet_log.delete_rows(idx)
+    sheet_log.delete_rows(row_idx)
 
 # --- 4. 설정 관리 ---
 def load_config():
     _, sheet_config = get_sheet_tabs()
     records = sheet_config.get_all_records()
-    default = {"volume":150.0,"base_dose":3.00,"t_kh":8.30,"t_ca":420,"t_mg":1420,"t_no2":0.010,"t_no3":5.00,"t_po4":0.040,"t_ph":8.30,"t_temp":26.0,"t_sal":35.0, "schedule":""}
+    default = {"volume":150.0,"base_dose":3.00,"t_kh":8.30,"t_ca":420,"t_mg":1420,"t_no2":0.010,"t_no3":5.00,"t_po4":0.040,"t_ph":8.30, "t_temp":26.0, "t_sal":35.0, "schedule":""}
     if not records: return default
     saved = records[0]
     for k, v in default.items(): 
@@ -164,55 +163,53 @@ def save_config(new_conf):
     sheet_config.append_row(list(new_conf.values()))
 
 # --- 5. 그래프 ---
-def draw_radar(cats, vals, t_vals, title, color_fill, color_line):
+def draw_radar(cats, vals, t_vals, title, color):
     norm_vals = [v/t if t>0 else 0 for v,t in zip(vals, t_vals)]
     cats=[*cats,cats[0]]; norm_vals=[*norm_vals,norm_vals[0]]
     fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(r=[1]*len(cats), theta=cats, line=dict(color="#a9bdd6", dash='dot'), name='Target'))
-    fig.add_trace(go.Scatterpolar(r=norm_vals, theta=cats, fill='toself', fillcolor=color_fill, line=dict(color=color_line, width=2), name='Current'))
-    fig.update_layout(polar=dict(radialaxis=dict(visible=False), angularaxis=dict(tickfont=dict(color="#eef6ff"), gridcolor="rgba(255,255,255,0.1)"), bgcolor="rgba(0,0,0,0)"), paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=30,b=30,l=40,r=40), height=300, title=dict(text=title, font=dict(color="#4be8ff", size=16)))
+    fig.add_trace(go.Scatterpolar(r=[1]*len(cats), theta=cats, line_color="gray", line_dash='dot', name='목표'))
+    fig.add_trace(go.Scatterpolar(r=norm_vals, theta=cats, fill='toself', line_color=color, name='현재'))
+    fig.update_layout(polar=dict(radialaxis=dict(visible=False)), margin=dict(t=30,b=30), height=300, title=dict(text=title))
     return fig
 
 # --- 6. 메인 화면 ---
-st.title("🧪 My Triton Lab")
+st.title("🐠 My Reef Manager")
 
 if "config" not in st.session_state: st.session_state.config = load_config()
 cfg = st.session_state.config
 
-# [사이드바]
+# 사이드바
 with st.sidebar:
-    st.header("⚙️ SYSTEM SETUP")
-    volume = st.number_input("💧 총 물량 (L)", value=float(cfg["volume"]), step=0.1)
-    base_dose = st.number_input("💉 기본 도징량 (ml)", value=float(cfg["base_dose"]), step=0.01)
+    st.header("⚙️ 설정")
+    volume = st.number_input("물량 (L)", value=float(cfg["volume"]), step=0.1)
+    base_dose = st.number_input("도징량 (ml)", value=float(cfg["base_dose"]), step=0.01)
+    st.divider()
+    st.subheader("🎯 목표치")
+    t_kh = st.number_input("KH", value=float(cfg["t_kh"]), step=0.01)
+    t_ca = st.number_input("Ca", value=int(cfg["t_ca"]), step=10)
+    t_mg = st.number_input("Mg", value=int(cfg["t_mg"]), step=10)
+    t_no3 = st.number_input("NO3", value=float(cfg["t_no3"]), step=0.1)
+    t_po4 = st.number_input("PO4", value=float(cfg["t_po4"]), format="%.3f", step=0.01)
     
-    st.markdown("---")
-    st.header("🎯 TARGETS")
-    t_kh = st.number_input("KH (dKH)", value=float(cfg["t_kh"]), step=0.01)
-    t_ca = st.number_input("Ca (ppm)", value=int(cfg["t_ca"]), step=10)
-    t_mg = st.number_input("Mg (ppm)", value=int(cfg["t_mg"]), step=10)
-    t_no3 = st.number_input("NO3 (ppm)", value=float(cfg["t_no3"]), step=0.1)
-    t_po4 = st.number_input("PO4 (ppm)", value=float(cfg["t_po4"]), format="%.3f", step=0.01)
-    
-    t_no2 = st.number_input("NO2 (ppm)", value=float(cfg.get("t_no2", 0.01)), format="%.3f", step=0.001)
+    t_no2 = st.number_input("NO2", value=float(cfg.get("t_no2", 0.01)), format="%.3f", step=0.001)
     t_ph = st.number_input("pH", value=float(cfg.get("t_ph", 8.3)), step=0.1)
     t_temp = st.number_input("Temp", value=float(cfg.get("t_temp", 26.0)), step=0.1)
     t_sal = st.number_input("Salinity", value=float(cfg.get("t_sal", 35.0)), step=0.1)
     
-    if st.button("💾 SAVE CONFIG"):
+    if st.button("💾 설정 저장"):
         new_conf = cfg.copy()
         new_conf.update({"volume":volume, "base_dose":base_dose, "t_kh":t_kh, "t_ca":t_ca, "t_mg":t_mg, "t_no3":t_no3, "t_po4":t_po4, "t_no2":t_no2, "t_ph":t_ph, "t_temp":t_temp, "t_sal":t_sal})
         save_config(new_conf)
         st.session_state.config = new_conf
-        st.toast("설정 저장 완료!"); st.rerun()
+        st.toast("설정 저장됨!"); st.rerun()
 
-st.success("✅ Connected")
+st.success("✅ 연결 완료")
 
-# [입력창]
-st.markdown("### 📝 New Log Entry")
-with st.container():
+# 입력창
+with st.expander("📝 새 기록 입력하기", expanded=True):
     with st.form("entry"):
         c1,c2,c3,c4 = st.columns(4)
-        d_date = c1.date_input("Date", date.today())
+        d_date = c1.date_input("날짜", date.today())
         d_kh = c2.number_input("KH", value=float(cfg["t_kh"]), step=0.01)
         d_ca = c3.number_input("Ca", value=int(cfg["t_ca"]), step=10)
         d_mg = c4.number_input("Mg", value=int(cfg["t_mg"]), step=10)
@@ -226,72 +223,84 @@ with st.container():
         c9,c10,c11 = st.columns([1,1,2])
         d_temp = c9.number_input("Temp", value=float(cfg.get("t_temp", 26.0)), step=0.1)
         d_sal = c10.number_input("Salinity", value=float(cfg.get("t_sal", 35.0)), step=0.1)
-        d_memo = c11.text_input("Memo")
+        d_memo = c11.text_input("메모")
         
-        if st.form_submit_button("SAVE LOG 💾"):
+        if st.form_submit_button("💾 기록 저장", type="primary"):
             entry={"날짜":d_date,"KH":d_kh,"Ca":d_ca,"Mg":d_mg,"NO2":d_no2,"NO3":d_no3,"PO4":d_po4,"pH":d_ph,"Temp":d_temp,"Salinity":d_sal,"도징량":base_dose,"Memo":d_memo}
             save_data(entry)
-            st.toast("저장되었습니다!"); st.rerun()
+            st.toast("저장됨!"); st.rerun()
 
-st.markdown("---")
+st.divider()
 df = load_data()
 
 if not df.empty:
     last = df.iloc[-1]
     
-    # [그래프 & AI & 스케줄]
     g1, g2 = st.columns([1.3, 0.7])
     with g1:
-        st.markdown("### 📊 Analysis")
+        st.subheader("📊 그래프")
         gc1, gc2 = st.columns(2)
-        gc1.plotly_chart(draw_radar(["KH","Ca","Mg","pH"],[last["KH"],last["Ca"],last["Mg"],last["pH"]],[cfg["t_kh"],cfg["t_ca"],cfg["t_mg"],cfg["t_ph"]],"Major & pH","rgba(75, 232, 255, 0.3)","#4be8ff"), use_container_width=True)
-        gc2.plotly_chart(draw_radar(["NO3","PO4","Sal","Temp"],[last["NO3"],last["PO4"]*100,last["Salinity"],last["Temp"]],[cfg["t_no3"],cfg["t_po4"]*100,cfg["t_sal"],cfg["t_temp"]],"Env & Nutrients","rgba(164, 255, 156, 0.3)","#a4ff9c"), use_container_width=True)
+        gc1.plotly_chart(draw_radar(["KH","Ca","Mg","pH"],[last["KH"],last["Ca"],last["Mg"],last["pH"]],[cfg["t_kh"],cfg["t_ca"],cfg["t_mg"],cfg["t_ph"]],"주요 3요소","#009688"), use_container_width=True)
+        gc2.plotly_chart(draw_radar(["NO3","PO4","Sal","Temp"],[last["NO3"],last["PO4"]*100,last["Salinity"],last["Temp"]],[cfg["t_no3"],cfg["t_po4"]*100,cfg["t_sal"],cfg["t_temp"]],"환경","#FF7043"), use_container_width=True)
     
     with g2:
-        st.markdown("### 🤖 Advisor")
+        st.subheader("🤖 AI 분석")
+        kh_diff = last["KH"] - float(cfg["t_kh"])
+        vol_factor = volume / 100.0
+        if abs(kh_diff) <= 0.15: st.success(f"✅ KH 완벽 ({last['KH']})")
+        elif kh_diff < 0: st.error(f"📉 KH 부족! 추천: {base_dose+0.3*vol_factor:.2f}ml")
+        else: st.warning(f"📈 KH 과다! 추천: {max(0, base_dose-0.3*vol_factor):.2f}ml")
+        
+        st.divider()
+        st.subheader("📅 스케줄")
+        current_sch = cfg.get("schedule", "")
+        new_sch = st.text_area("주간 계획", value=current_sch, height=150)
+        if st.button("💾 스케줄 저장"):
+            updated_conf = cfg.copy(); updated_conf["schedule"] = new_sch
+            save_config(updated_conf); st.session_state.config = updated_conf
+            st.toast("저장됨!")
+
+    st.divider()
+    
+    # -------------------------------------------------------------
+    # [수정된 부분] 엑셀형 X -> 게시판(카드)형 O
+    # -------------------------------------------------------------
+    st.subheader("📋 전체 기록 관리")
+    
+    df_show = df.sort_values("날짜", ascending=False)
+    
+    for index, row in df_show.iterrows():
+        # 각 기록을 하나의 카드(컨테이너)로 표시
         with st.container():
-            kh_diff = last["KH"] - float(cfg["t_kh"])
-            vol_factor = volume / 100.0
-            if abs(kh_diff) <= 0.15: st.success(f"✨ **Perfect!** KH 유지하세요.")
-            elif kh_diff < 0: 
-                rec = base_dose + 0.3 * vol_factor
-                st.error(f"📉 **KH Low!** Rec: {rec:.1f}ml")
-            else: 
-                rec = max(0, base_dose - 0.3 * vol_factor)
-                st.warning(f"📈 **KH High!** Rec: {rec:.1f}ml")
+            # 날짜 헤더
+            st.markdown(f"#### 📅 {row['날짜']}")
             
-            st.markdown("---")
-            st.markdown("#### 📅 Schedule")
-            cur_sch = cfg.get("schedule", "")
-            new_sch = st.text_area("Schedule", value=cur_sch, height=120, label_visibility="collapsed")
-            if st.button("SAVE SCHEDULE"):
-                new_c = cfg.copy(); new_c["schedule"] = new_sch
-                save_config(new_c); st.session_state.config = new_c; st.toast("스케줄 저장됨!")
+            c_data, c_btn = st.columns([5, 1])
+            
+            with c_data:
+                # 주요 수치 표시 (진하게)
+                st.markdown(f"""
+                <div style='background-color: #F8F9FA; padding: 10px; border-radius: 8px;'>
+                    <span class='metric-value'>🧪 KH: {row['KH']}</span> &nbsp;|&nbsp; 
+                    Ca: {row['Ca']} &nbsp;|&nbsp; Mg: {row['Mg']} &nbsp;|&nbsp; 
+                    NO3: {row['NO3']} &nbsp;|&nbsp; PO4: {row['PO4']} &nbsp;|&nbsp; 
+                    💧 도징: {row['도징량']}ml
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 메모가 있으면 표시
+                if row['Memo'] and str(row['Memo']).strip():
+                    st.info(f"📝 {row['Memo']}")
+            
+            with c_btn:
+                # 삭제 버튼
+                st.write("") # 줄바꿈
+                if st.button("🗑️ 삭제", key=f"del_{row['_row_idx']}", type="secondary", use_container_width=True):
+                    delete_row(row['_row_idx'])
+                    st.toast("삭제되었습니다!")
+                    st.rerun()
+            
+            st.divider() # 구분선
 
-    st.markdown("---")
-    
-    # [기록 관리] 엑셀형 + 체크박스 삭제
-    st.markdown("### 📋 History Log")
-    df_show = df.sort_values("날짜", ascending=False).copy()
-    df_show.insert(0, "삭제", False)
-    df_show['Memo'] = df_show['Memo'].apply(lambda x: str(x) if x else "")
-
-    edited_df = st.data_editor(
-        df_show,
-        column_config={
-            "삭제": st.column_config.CheckboxColumn("선택", width="small", default=False),
-            "_row_idx": None,
-            "Memo": st.column_config.TextColumn("메모", width="large")
-        },
-        disabled=HEADERS, hide_index=True, use_container_width=True
-    )
-    
-    if st.button("🗑️ 선택한 기록 삭제하기"):
-        to_del = edited_df[edited_df["삭제"] == True]["_row_idx"].tolist()
-        if to_del:
-            delete_rows(to_del)
-            st.toast("삭제 완료!"); st.rerun()
-        else:
-            st.warning("선택된 항목이 없습니다.")
 else:
     st.info("👋 기록이 없습니다.")
