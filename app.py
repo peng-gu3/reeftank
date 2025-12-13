@@ -19,6 +19,7 @@ html_code = """
             --primary: #2563eb; 
             --red: #ef4444; --red-bg: #fef2f2; --red-text: #b91c1c;
             --blue: #3b82f6; --blue-bg: #eff6ff; --blue-text: #1d4ed8;
+            --green: #22c55e; --green-bg: #f0fdf4; --green-text: #15803d; /* 초록색 변수 추가 */
             --gray: #64748b; --gray-bg: #f8fafc; --gray-text: #334155;
             --bg: #ffffff; --surface: #ffffff;
             --text-main: #1e293b; --text-sub: #64748b;
@@ -73,11 +74,18 @@ html_code = """
         .btn-save { width: 100%; padding: 10px; background: #1e293b; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 10px; }
         .btn-cancel { width: 100%; padding: 10px; background: #e2e8f0; color: var(--text-sub); border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 10px; }
 
+        /* 달력 뱃지 스타일 */
         .badge { font-size: 10px; padding: 4px 6px; border-radius: 4px; font-weight: 500; display:flex; flex-direction:column; gap:1px; margin-bottom: 2px; }
+        
+        /* 매수 = 빨강 */
         .badge.buy { background: var(--red-bg); color: var(--red-text); border: 1px solid rgba(248,113,113,0.2); }
-        .badge.sell-profit { background: #fff1f2; color: #be123c; border-left: 3px solid #be123c; }
-        .badge.sell-loss { background: #eff6ff; color: #1d4ed8; border-left: 3px solid #1d4ed8; }
-        .badge.other { background: var(--gray-bg); color: var(--gray-text); border: 1px solid #e2e8f0; }
+        
+        /* 매도 = 파랑 */
+        .badge.sell { background: var(--blue-bg); color: var(--blue-text); border: 1px solid rgba(59,130,246,0.2); }
+        
+        /* 기타(예수금) = 연한 초록 */
+        .badge.other { background: var(--green-bg); color: var(--green-text); border: 1px solid #bbf7d0; }
+        
         .badge-amt { font-size: 9px; font-weight: 400; opacity: 0.9; }
 
         .log-section { margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 15px; }
@@ -170,7 +178,7 @@ html_code = """
 
     function init() { renderAll(); }
     function renderAll() { renderCalendar(); updateSummary(); renderChart(); }
-    function formatMoney(n) { return Number(n).toLocaleString(); } // '원' 제거하고 숫자만 깔끔하게, 아래에서 추가
+    function formatMoney(n) { return Number(n).toLocaleString(); }
     function formatMoneyFull(n) { return Number(n).toLocaleString() + '원'; }
     
     // 데이터 백업/복구
@@ -245,13 +253,11 @@ html_code = """
                 <div class="day-num">${i}</div>${emoji ? `<div class="day-emoji">${emoji}</div>` : ''}`;
             
             logs.forEach(l => {
-                // 달력 배지에 금액 표시 로직 추가
                 if(l.type === 'buy') {
                     let totalBuy = l.price * l.qty;
-                    html += `<div class="badge buy ${l.remainingQty===0?'sold-out':''}"><span>${l.name}</span><span class="badge-amt">${formatMoney(totalBuy)}</span></div>`;
+                    html += `<div class="badge buy ${l.remainingQty===0?'sold-out':''}"><span>${l.name}</span><span class="badge-amt">매수 ${formatMoney(totalBuy)}</span></div>`;
                 } else if(l.type === 'sell') {
-                    let win = l.profit >= 0;
-                    html += `<div class="badge ${win?'sell-profit':'sell-loss'}"><span>${l.name}</span><span class="badge-amt">${formatMoney(l.profit)}</span></div>`;
+                    html += `<div class="badge sell"><span>${l.name}</span><span class="badge-amt">매도 ${formatMoney(l.profit)}</span></div>`;
                 } else {
                     html += `<div class="badge other"><span>${l.name}</span><span class="badge-amt">${formatMoney(l.price)}</span></div>`;
                 }
@@ -399,7 +405,13 @@ html_code = """
         if(hlds.length > 0) {
             html += '<div style="font-size:12px; font-weight:700; color:#ea580c; margin:15px 0 5px 0;">📦 매도 가능 (클릭)</div>';
             hlds.forEach(g => {
-                html += `<div class="log-item" style="border-left:3px solid #2563eb; cursor:pointer;" onclick="initiateSell(${g.id})"><div style="display:flex;flex-direction:column;"><span class="log-name">${g.name}</span><span class="log-detail">${g.date} | 잔여:${g.remainingQty}주</span></div></div>`;
+                let totalBuyVal = g.price * g.remainingQty;
+                html += `<div class="log-item" style="border-left:3px solid #2563eb; cursor:pointer;" onclick="initiateSell(${g.id})">
+                    <div style="display:flex;flex-direction:column;">
+                        <span class="log-name">${g.name}</span>
+                        <span class="log-detail">${g.date} | 잔여:${g.remainingQty}주 | 매수금:${formatMoneyFull(totalBuyVal)}</span>
+                    </div>
+                </div>`;
             });
         }
         list.innerHTML = html;
