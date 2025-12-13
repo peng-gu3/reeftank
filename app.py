@@ -73,11 +73,12 @@ html_code = """
         .btn-save { width: 100%; padding: 10px; background: #1e293b; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 10px; }
         .btn-cancel { width: 100%; padding: 10px; background: #e2e8f0; color: var(--text-sub); border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 10px; }
 
-        .badge { font-size: 10px; padding: 3px 5px; border-radius: 4px; font-weight: 500; display:flex; flex-direction:column; gap:1px; margin-bottom: 2px; }
+        .badge { font-size: 10px; padding: 4px 6px; border-radius: 4px; font-weight: 500; display:flex; flex-direction:column; gap:1px; margin-bottom: 2px; }
         .badge.buy { background: var(--red-bg); color: var(--red-text); border: 1px solid rgba(248,113,113,0.2); }
         .badge.sell-profit { background: #fff1f2; color: #be123c; border-left: 3px solid #be123c; }
         .badge.sell-loss { background: #eff6ff; color: #1d4ed8; border-left: 3px solid #1d4ed8; }
         .badge.other { background: var(--gray-bg); color: var(--gray-text); border: 1px solid #e2e8f0; }
+        .badge-amt { font-size: 9px; font-weight: 400; opacity: 0.9; }
 
         .log-section { margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 15px; }
         .log-item { background: white; border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
@@ -169,7 +170,8 @@ html_code = """
 
     function init() { renderAll(); }
     function renderAll() { renderCalendar(); updateSummary(); renderChart(); }
-    function formatMoney(n) { return Number(n).toLocaleString() + '원'; }
+    function formatMoney(n) { return Number(n).toLocaleString(); } // '원' 제거하고 숫자만 깔끔하게, 아래에서 추가
+    function formatMoneyFull(n) { return Number(n).toLocaleString() + '원'; }
     
     // 데이터 백업/복구
     function exportData() {
@@ -243,9 +245,16 @@ html_code = """
                 <div class="day-num">${i}</div>${emoji ? `<div class="day-emoji">${emoji}</div>` : ''}`;
             
             logs.forEach(l => {
-                if(l.type === 'buy') html += `<div class="badge buy ${l.remainingQty===0?'sold-out':''}"><span>${l.name}</span></div>`;
-                else if(l.type === 'sell') html += `<div class="badge ${l.profit>=0?'sell-profit':'sell-loss'}"><span>${l.name}</span></div>`;
-                else html += `<div class="badge other"><span>${l.name}</span></div>`;
+                // 달력 배지에 금액 표시 로직 추가
+                if(l.type === 'buy') {
+                    let totalBuy = l.price * l.qty;
+                    html += `<div class="badge buy ${l.remainingQty===0?'sold-out':''}"><span>${l.name}</span><span class="badge-amt">${formatMoney(totalBuy)}</span></div>`;
+                } else if(l.type === 'sell') {
+                    let win = l.profit >= 0;
+                    html += `<div class="badge ${win?'sell-profit':'sell-loss'}"><span>${l.name}</span><span class="badge-amt">${formatMoney(l.profit)}</span></div>`;
+                } else {
+                    html += `<div class="badge other"><span>${l.name}</span><span class="badge-amt">${formatMoney(l.price)}</span></div>`;
+                }
             });
             grid.innerHTML += html + `</div>`;
         }
@@ -282,10 +291,10 @@ html_code = """
     function calc() {
         const p = Number(document.getElementById('inputPrice').value);
         const q = Number(document.getElementById('inputQty').value);
-        document.getElementById('calcTotal').innerText = (p * q).toLocaleString();
+        document.getElementById('calcTotal').innerText = formatMoneyFull(p * q);
     }
     
-    // 저장 (신규 or 수정) - [수정 로직 개선됨]
+    // 저장 (신규 or 수정)
     function save() {
         const d = document.getElementById('inputDate').value;
         const t = document.getElementById('inputType').value;
@@ -298,25 +307,20 @@ html_code = """
         if (editingId) {
             let target = transactions.find(x => x.id === editingId);
             if (target) {
-                // [중요] 매수 수정 시 잔여 수량도 함께 업데이트
                 if (target.type === 'buy') {
-                    const diffQty = q - target.qty; // 수량 변동폭
-                    target.remainingQty += diffQty; // 잔여량에 반영
-                    
-                    // 단가가 바뀌면 연결된 매도들의 수익금도 재계산
+                    const diffQty = q - target.qty;
+                    target.remainingQty += diffQty;
                     if(target.price !== p) {
                         transactions.filter(x => x.linkedBuyId === target.id).forEach(s => {
                             s.profit = (s.price - p) * s.qty;
                         });
                     }
                 }
-                
                 target.date = d;
                 target.name = n;
                 target.price = p;
                 target.qty = q;
 
-                // 매도 수정 시 수익금 재계산
                 if (target.type === 'sell' && target.linkedBuyId) {
                     let buyRec = transactions.find(x => x.id === target.linkedBuyId);
                     if (buyRec) target.profit = (p - buyRec.price) * q;
@@ -375,9 +379,9 @@ html_code = """
         let html = '';
         logs.forEach(g => {
             let info = '';
-            if(g.type === 'buy') info = `[매수] ${g.qty}주`;
-            else if(g.type === 'sell') info = `[매도] 수익:${g.profit.toLocaleString()}`;
-            else info = `[기타] ${g.price.toLocaleString()}`;
+            if(g.type === 'buy') info = `[매수] ${g.qty}주 @ ${formatMoneyFull(g.price)}`;
+            else if(g.type === 'sell') info = `[매도] 수익:${formatMoneyFull(g.profit)}`;
+            else info = `[기타] ${formatMoneyFull(g.price)}`;
             
             html += `<div class="log-item">
                 <div style="display:flex;flex-direction:column;">
@@ -426,9 +430,9 @@ html_code = """
                 if(t.date.startsWith(cm)) { mp+=p; if(p>maxP){maxP=p; maxN=t.name;} }
             } else if(t.type === 'other') { tp+=t.price; if(t.date.startsWith(cm)) mp+=t.price; }
         });
-        document.getElementById('totalProfit').innerText = formatMoney(tp);
-        document.getElementById('monthProfit').innerText = formatMoney(mp);
-        document.getElementById('avgProfit').innerText = formatMoney(sc>0?Math.round(sps/sc):0);
+        document.getElementById('totalProfit').innerText = formatMoneyFull(tp);
+        document.getElementById('monthProfit').innerText = formatMoneyFull(mp);
+        document.getElementById('avgProfit').innerText = formatMoneyFull(sc>0?Math.round(sps/sc):0);
         document.getElementById('bestStock').innerText = maxN;
     }
 
