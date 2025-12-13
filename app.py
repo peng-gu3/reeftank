@@ -165,7 +165,7 @@ html_code = """
     let transactions = JSON.parse(localStorage.getItem('stockData_st')) || [];
     let myChart = null;
     let linkedBuyData = null; let currentMode = 'new';
-    let editingId = null; // 수정 중인 ID
+    let editingId = null; 
 
     function init() { renderAll(); }
     function renderAll() { renderCalendar(); updateSummary(); renderChart(); }
@@ -256,7 +256,7 @@ html_code = """
     function openModal(dStr) {
         currentMode = 'new'; linkedBuyData = null; editingId = null;
         document.getElementById('modalOverlay').style.display = 'flex';
-        document.getElementById('modalTitle').innerText = "거래 입력"; // 타이틀 초기화
+        document.getElementById('modalTitle').innerText = "거래 입력"; 
         document.getElementById('inputDate').value = dStr;
         document.getElementById('inputType').disabled = false;
         document.getElementById('inputType').value = 'buy';
@@ -285,7 +285,7 @@ html_code = """
         document.getElementById('calcTotal').innerText = (p * q).toLocaleString();
     }
     
-    // 저장 (신규 or 수정)
+    // 저장 (신규 or 수정) - [수정 로직 개선됨]
     function save() {
         const d = document.getElementById('inputDate').value;
         const t = document.getElementById('inputType').value;
@@ -296,15 +296,27 @@ html_code = """
         if(!n || (!p && p!==0) || !q) { alert("입력 확인"); return; }
 
         if (editingId) {
-            // 수정 모드: 기존 데이터를 업데이트
             let target = transactions.find(x => x.id === editingId);
             if (target) {
+                // [중요] 매수 수정 시 잔여 수량도 함께 업데이트
+                if (target.type === 'buy') {
+                    const diffQty = q - target.qty; // 수량 변동폭
+                    target.remainingQty += diffQty; // 잔여량에 반영
+                    
+                    // 단가가 바뀌면 연결된 매도들의 수익금도 재계산
+                    if(target.price !== p) {
+                        transactions.filter(x => x.linkedBuyId === target.id).forEach(s => {
+                            s.profit = (s.price - p) * s.qty;
+                        });
+                    }
+                }
+                
                 target.date = d;
                 target.name = n;
                 target.price = p;
                 target.qty = q;
-                // 매수일 경우 잔여량 계산 로직 등은 복잡하므로 여기선 단순 값 수정만 적용
-                // 매도일 경우 수익금 재계산 필요
+
+                // 매도 수정 시 수익금 재계산
                 if (target.type === 'sell' && target.linkedBuyId) {
                     let buyRec = transactions.find(x => x.id === target.linkedBuyId);
                     if (buyRec) target.profit = (p - buyRec.price) * q;
@@ -312,7 +324,6 @@ html_code = """
             }
             editingId = null;
         } else {
-            // 신규 모드
             if(t === 'sell' && currentMode === 'sell_link' && linkedBuyData) {
                 if(q > linkedBuyData.remainingQty) { alert("보유 초과"); return; }
                 transactions.push({id:Date.now(), date:d, type:'sell', name:n, price:p, qty:q, linkedBuyId:linkedBuyData.id, profit:(p-linkedBuyData.price)*q});
@@ -326,22 +337,18 @@ html_code = """
         
         localStorage.setItem('stockData_st', JSON.stringify(transactions));
         
-        if(t === 'sell' && !editingId) closeModal(); // 매도 신규저장시에만 닫기
+        if(t === 'sell' && !editingId) closeModal(); 
         else { 
             document.getElementById('inputName').value=''; 
             document.getElementById('inputPrice').value=''; 
             if (t==='buy') document.getElementById('inputQty').value='1';
-            
-            // 수정 후 초기화
             document.getElementById('modalTitle').innerText = "거래 입력";
             editingId = null; 
-            
             renderLog(d); 
         }
         renderAll();
     }
 
-    // 수정 기능 (데이터 불러오기)
     function editLog(id) {
         let t = transactions.find(x => x.id === id);
         if (!t) return;
@@ -350,18 +357,14 @@ html_code = """
         document.getElementById('modalTitle').innerText = "거래 수정";
         document.getElementById('inputDate').value = t.date;
         document.getElementById('inputType').value = t.type;
-        document.getElementById('inputType').disabled = true; // 타입 변경 불가 (오류 방지)
+        document.getElementById('inputType').disabled = true;
         
         document.getElementById('inputName').value = t.name;
         document.getElementById('inputPrice').value = t.price;
         document.getElementById('inputQty').value = t.qty;
         
-        // 매도 수정 시 이름 변경 불가 (매수와 연결되어 있으므로)
-        if (t.type === 'sell') {
-            document.getElementById('inputName').readOnly = true;
-        } else {
-            document.getElementById('inputName').readOnly = false;
-        }
+        if (t.type === 'sell') { document.getElementById('inputName').readOnly = true; } 
+        else { document.getElementById('inputName').readOnly = false; }
         
         handleTypeChange();
     }
