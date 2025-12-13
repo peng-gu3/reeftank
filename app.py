@@ -1,10 +1,10 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# 페이지 설정 (넓게 보기)
+# 페이지 설정
 st.set_page_config(layout="wide", page_title="주식 매매일지 Pro")
 
-# HTML/JS/CSS 코드 (아까 그 디자인 그대로 + 차트/백업 기능 포함)
+# HTML/JS/CSS 코드
 html_code = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -67,6 +67,7 @@ html_code = """
         .form-group { margin-bottom: 12px; }
         .form-label { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--text-sub); }
         .form-input, .form-select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; box-sizing: border-box; background: white; }
+        .form-input:disabled, .form-select:disabled { background: #f1f5f9; color: #94a3b8; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         
         .btn-save { width: 100%; padding: 10px; background: #1e293b; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 10px; }
@@ -82,6 +83,10 @@ html_code = """
         .log-item { background: white; border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
         .log-name { font-weight: 700; font-size: 12px; color: var(--text-main); }
         .log-detail { font-size: 10px; color: var(--text-sub); }
+        
+        .btn-group { display: flex; gap: 5px; }
+        .btn-edit { color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; cursor: pointer; font-size: 11px; padding: 3px 6px; border-radius: 4px; font-weight: 600; }
+        .btn-edit:hover { background: #e2e8f0; }
         .btn-delete { color: #cbd5e1; background: none; border: none; cursor: pointer; font-size: 16px; }
         .btn-delete:hover { color: var(--red); }
     </style>
@@ -90,7 +95,7 @@ html_code = """
 
 <div class="container">
     <div class="main-header">
-        <h1 class="main-title">📈 하루 20만 목표!!! (Streamlit Ver)</h1>
+        <h1 class="main-title">📈 하루 20만 목표!!! (Streamlit)</h1>
         <div style="display:flex; gap:10px;">
             <button class="btn-backup" onclick="exportData()">💾 백업 저장</button>
             <button class="btn-backup" onclick="document.getElementById('fileInput').click()">📂 데이터 복구</button>
@@ -120,7 +125,7 @@ html_code = """
 <div class="modal-overlay" id="modalOverlay">
     <div class="modal">
         <div class="modal-header">
-            <h2 class="modal-title">거래 입력</h2>
+            <h2 class="modal-title" id="modalTitle">거래 입력</h2>
             <button class="btn-close" onclick="closeModal()">&times;</button>
         </div>
         <div class="modal-body">
@@ -157,16 +162,16 @@ html_code = """
 
 <script>
     let currentDate = new Date();
-    // 로컬 스토리지 사용 (브라우저에 저장)
     let transactions = JSON.parse(localStorage.getItem('stockData_st')) || [];
     let myChart = null;
     let linkedBuyData = null; let currentMode = 'new';
+    let editingId = null; // 수정 중인 ID
 
     function init() { renderAll(); }
     function renderAll() { renderCalendar(); updateSummary(); renderChart(); }
     function formatMoney(n) { return Number(n).toLocaleString() + '원'; }
     
-    // 데이터 백업/복구 (JSON 파일)
+    // 데이터 백업/복구
     function exportData() {
         const dataStr = JSON.stringify(transactions);
         const link = document.createElement('a');
@@ -247,10 +252,11 @@ html_code = """
     }
     function changeMonth(d) { currentDate.setMonth(currentDate.getMonth()+d); renderCalendar(); }
 
-    // 모달
+    // 모달 & 입력
     function openModal(dStr) {
-        currentMode = 'new'; linkedBuyData = null;
+        currentMode = 'new'; linkedBuyData = null; editingId = null;
         document.getElementById('modalOverlay').style.display = 'flex';
+        document.getElementById('modalTitle').innerText = "거래 입력"; // 타이틀 초기화
         document.getElementById('inputDate').value = dStr;
         document.getElementById('inputType').disabled = false;
         document.getElementById('inputType').value = 'buy';
@@ -263,6 +269,7 @@ html_code = """
         document.getElementById('inputQty').oninput = calc;
     }
     function closeModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+    
     function handleTypeChange() {
         const t = document.getElementById('inputType').value;
         const pl = document.getElementById('priceLabel');
@@ -277,6 +284,8 @@ html_code = """
         const q = Number(document.getElementById('inputQty').value);
         document.getElementById('calcTotal').innerText = (p * q).toLocaleString();
     }
+    
+    // 저장 (신규 or 수정)
     function save() {
         const d = document.getElementById('inputDate').value;
         const t = document.getElementById('inputType').value;
@@ -286,19 +295,75 @@ html_code = """
 
         if(!n || (!p && p!==0) || !q) { alert("입력 확인"); return; }
 
-        if(t === 'sell' && currentMode === 'sell_link' && linkedBuyData) {
-            if(q > linkedBuyData.remainingQty) { alert("보유 초과"); return; }
-            transactions.push({id:Date.now(), date:d, type:'sell', name:n, price:p, qty:q, linkedBuyId:linkedBuyData.id, profit:(p-linkedBuyData.price)*q});
-            linkedBuyData.remainingQty -= q;
-        } else if(t === 'buy') {
-            transactions.push({id:Date.now(), date:d, type:'buy', name:n, price:p, qty:q, remainingQty:q});
+        if (editingId) {
+            // 수정 모드: 기존 데이터를 업데이트
+            let target = transactions.find(x => x.id === editingId);
+            if (target) {
+                target.date = d;
+                target.name = n;
+                target.price = p;
+                target.qty = q;
+                // 매수일 경우 잔여량 계산 로직 등은 복잡하므로 여기선 단순 값 수정만 적용
+                // 매도일 경우 수익금 재계산 필요
+                if (target.type === 'sell' && target.linkedBuyId) {
+                    let buyRec = transactions.find(x => x.id === target.linkedBuyId);
+                    if (buyRec) target.profit = (p - buyRec.price) * q;
+                }
+            }
+            editingId = null;
         } else {
-            transactions.push({id:Date.now(), date:d, type:'other', name:n, price:p, qty:1});
+            // 신규 모드
+            if(t === 'sell' && currentMode === 'sell_link' && linkedBuyData) {
+                if(q > linkedBuyData.remainingQty) { alert("보유 초과"); return; }
+                transactions.push({id:Date.now(), date:d, type:'sell', name:n, price:p, qty:q, linkedBuyId:linkedBuyData.id, profit:(p-linkedBuyData.price)*q});
+                linkedBuyData.remainingQty -= q;
+            } else if(t === 'buy') {
+                transactions.push({id:Date.now(), date:d, type:'buy', name:n, price:p, qty:q, remainingQty:q});
+            } else {
+                transactions.push({id:Date.now(), date:d, type:'other', name:n, price:p, qty:1});
+            }
         }
+        
         localStorage.setItem('stockData_st', JSON.stringify(transactions));
-        if(t === 'sell') closeModal();
-        else { document.getElementById('inputName').value=''; document.getElementById('inputPrice').value=''; renderLog(d); }
+        
+        if(t === 'sell' && !editingId) closeModal(); // 매도 신규저장시에만 닫기
+        else { 
+            document.getElementById('inputName').value=''; 
+            document.getElementById('inputPrice').value=''; 
+            if (t==='buy') document.getElementById('inputQty').value='1';
+            
+            // 수정 후 초기화
+            document.getElementById('modalTitle').innerText = "거래 입력";
+            editingId = null; 
+            
+            renderLog(d); 
+        }
         renderAll();
+    }
+
+    // 수정 기능 (데이터 불러오기)
+    function editLog(id) {
+        let t = transactions.find(x => x.id === id);
+        if (!t) return;
+        
+        editingId = id;
+        document.getElementById('modalTitle').innerText = "거래 수정";
+        document.getElementById('inputDate').value = t.date;
+        document.getElementById('inputType').value = t.type;
+        document.getElementById('inputType').disabled = true; // 타입 변경 불가 (오류 방지)
+        
+        document.getElementById('inputName').value = t.name;
+        document.getElementById('inputPrice').value = t.price;
+        document.getElementById('inputQty').value = t.qty;
+        
+        // 매도 수정 시 이름 변경 불가 (매수와 연결되어 있으므로)
+        if (t.type === 'sell') {
+            document.getElementById('inputName').readOnly = true;
+        } else {
+            document.getElementById('inputName').readOnly = false;
+        }
+        
+        handleTypeChange();
     }
 
     function renderLog(dStr) {
@@ -310,10 +375,19 @@ html_code = """
             if(g.type === 'buy') info = `[매수] ${g.qty}주`;
             else if(g.type === 'sell') info = `[매도] 수익:${g.profit.toLocaleString()}`;
             else info = `[기타] ${g.price.toLocaleString()}`;
-            html += `<div class="log-item"><div style="display:flex;flex-direction:column;"><span class="log-name">${g.name}</span><span class="log-detail">${info}</span></div><button class="btn-delete" onclick="del(${g.id})">&times;</button></div>`;
+            
+            html += `<div class="log-item">
+                <div style="display:flex;flex-direction:column;">
+                    <span class="log-name">${g.name}</span>
+                    <span class="log-detail">${info}</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn-edit" onclick="editLog(${g.id})">수정</button>
+                    <button class="btn-delete" onclick="del(${g.id})">&times;</button>
+                </div>
+            </div>`;
         });
         
-        // 보유 종목 표시 (매도용)
         const hlds = transactions.filter(x => x.type === 'buy' && x.remainingQty > 0);
         if(hlds.length > 0) {
             html += '<div style="font-size:12px; font-weight:700; color:#ea580c; margin:15px 0 5px 0;">📦 매도 가능 (클릭)</div>';
@@ -326,7 +400,8 @@ html_code = """
 
     function initiateSell(bid) {
         let b = transactions.find(x => x.id === bid); if(!b) return;
-        currentMode = 'sell_link'; linkedBuyData = b;
+        currentMode = 'sell_link'; linkedBuyData = b; editingId = null;
+        document.getElementById('modalTitle').innerText = "매도 입력";
         document.getElementById('inputType').value = 'sell'; document.getElementById('inputType').disabled = true;
         document.getElementById('inputName').value = b.name; document.getElementById('inputName').readOnly = true;
         document.getElementById('inputPrice').value = ''; document.getElementById('inputQty').value = b.remainingQty;
@@ -360,5 +435,4 @@ html_code = """
 </html>
 """
 
-# Streamlit 안에 HTML 코드를 삽입 (높이는 넉넉하게 1200px)
 components.html(html_code, height=1200, scrolling=True)
