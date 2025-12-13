@@ -1,188 +1,364 @@
 import streamlit as st
-import pandas as pd
-import json
-import time
-from datetime import datetime
-import plotly.express as px
+import streamlit.components.v1 as components
 
-# --- 페이지 설정 ---
-st.set_page_config(page_title="주식 매매일지", layout="wide", page_icon="📈")
+# 페이지 설정 (넓게 보기)
+st.set_page_config(layout="wide", page_title="주식 매매일지 Pro")
 
-# --- 데이터 관리 함수 ---
-# Streamlit Cloud는 껐다 켜면 파일이 초기화되므로, 
-# '파일 업로드/다운로드' 방식으로 데이터를 관리해야 안전합니다.
-
-if 'transactions' not in st.session_state:
-    st.session_state.transactions = []
-
-def load_data(uploaded_file):
-    try:
-        data = json.load(uploaded_file)
-        st.session_state.transactions = data
-        st.success("데이터 복구 완료!")
-    except:
-        st.error("잘못된 파일입니다.")
-
-# --- 사이드바: 입력 및 관리 ---
-with st.sidebar:
-    st.header("📝 거래 입력")
-    
-    with st.form("input_form", clear_on_submit=True):
-        date = st.date_input("날짜", datetime.now())
-        type_option = st.selectbox("구분", ["매수 (Buy)", "매도 (Sell)", "기타 (예수금)"])
+# HTML/JS/CSS 코드 (아까 그 디자인 그대로 + 차트/백업 기능 포함)
+html_code = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>주식 매매일지</title>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb; 
+            --red: #ef4444; --red-bg: #fef2f2; --red-text: #b91c1c;
+            --blue: #3b82f6; --blue-bg: #eff6ff; --blue-text: #1d4ed8;
+            --gray: #64748b; --gray-bg: #f8fafc; --gray-text: #334155;
+            --bg: #ffffff; --surface: #ffffff;
+            --text-main: #1e293b; --text-sub: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        body { font-family: 'Pretendard', sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 20px; line-height: 1.5; overflow-x: hidden; }
         
-        # 매도 시 보유 종목 선택 기능
-        holdings = [t for t in st.session_state.transactions if t['type'] == 'buy' and t.get('remaining_qty', 0) > 0]
-        holding_map = {f"{t['name']} (잔여: {t.get('remaining_qty')}주)": t['id'] for t in holdings}
+        .main-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .main-title { font-size: 24px; font-weight: 800; margin: 0; }
         
-        selected_holding_id = None
-        name = ""
+        .btn-backup { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: white; cursor: pointer; font-weight: 600; color: var(--text-sub); font-size: 13px; transition: 0.2s; }
+        .btn-backup:hover { background: #f1f5f9; color: var(--text-main); }
+
+        .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: var(--surface); padding: 20px; border-radius: 16px; box-shadow: var(--shadow); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; }
+        .stat-card h3 { margin: 0 0 8px 0; font-size: 13px; color: var(--text-sub); font-weight: 600; }
+        .stat-card p { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+        .text-up { color: var(--red-text); } .text-down { color: var(--blue-text); } .text-neutral { color: var(--text-main); }
         
-        if type_option == "매도 (Sell)":
-            if holdings:
-                sel = st.selectbox("보유 종목 선택", list(holding_map.keys()))
-                selected_holding_id = holding_map[sel]
-            else:
-                st.warning("매도할 종목이 없습니다.")
-        elif type_option == "매수 (Buy)":
-            name = st.text_input("종목명")
-        else:
-            name = st.text_input("내용 (예: 월급)")
+        .chart-container { background: var(--surface); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 20px; height: 250px; position: relative; }
+
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: var(--surface); padding: 10px 20px; border-radius: 16px; box-shadow: var(--shadow); }
+        .calendar-header h2 { margin: 0; font-size: 18px; font-weight: 700; }
+        .btn-nav { background: var(--bg); border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--text-sub); font-size: 13px; }
+        .btn-nav:hover { background: #e2e8f0; color: var(--text-main); }
+
+        .calendar-wrapper { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); padding: 20px; border: 1px solid var(--border); }
+        .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+        .day-header { text-align: left; font-weight: 600; color: var(--text-sub); padding-bottom: 10px; font-size: 12px; padding-left: 5px; }
+        .day { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; min-height: 100px; padding: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: 0.2s; position: relative; }
+        .day:hover { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,0.1); z-index: 10; }
+        .day.today { background: #f8fafc; border-color: var(--primary); }
+        
+        .day-num { font-size: 13px; font-weight: 600; color: var(--text-sub); margin-bottom: 2px; }
+        .day.today .day-num { background: var(--primary); color: white; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; }
+        .day-emoji { position: absolute; top: 8px; right: 8px; font-size: 16px; }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); z-index: 1000; justify-content: center; align-items: center; }
+        .modal { background: white; border-radius: 20px; width: 450px; max-width: 95%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+        .modal-header { padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: white; }
+        .modal-title { font-size: 16px; font-weight: 700; margin: 0; }
+        .btn-close { border: none; background: none; cursor: pointer; font-size: 20px; color: var(--text-sub); }
+        
+        .modal-body { padding: 20px; overflow-y: auto; background: #fafafa; }
+        .form-group { margin-bottom: 12px; }
+        .form-label { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--text-sub); }
+        .form-input, .form-select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; box-sizing: border-box; background: white; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        .btn-save { width: 100%; padding: 10px; background: #1e293b; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 10px; }
+        .btn-cancel { width: 100%; padding: 10px; background: #e2e8f0; color: var(--text-sub); border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 10px; }
+
+        .badge { font-size: 10px; padding: 3px 5px; border-radius: 4px; font-weight: 500; display:flex; flex-direction:column; gap:1px; margin-bottom: 2px; }
+        .badge.buy { background: var(--red-bg); color: var(--red-text); border: 1px solid rgba(248,113,113,0.2); }
+        .badge.sell-profit { background: #fff1f2; color: #be123c; border-left: 3px solid #be123c; }
+        .badge.sell-loss { background: #eff6ff; color: #1d4ed8; border-left: 3px solid #1d4ed8; }
+        .badge.other { background: var(--gray-bg); color: var(--gray-text); border: 1px solid #e2e8f0; }
+
+        .log-section { margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 15px; }
+        .log-item { background: white; border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .log-name { font-weight: 700; font-size: 12px; color: var(--text-main); }
+        .log-detail { font-size: 10px; color: var(--text-sub); }
+        .btn-delete { color: #cbd5e1; background: none; border: none; cursor: pointer; font-size: 16px; }
+        .btn-delete:hover { color: var(--red); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="main-header">
+        <h1 class="main-title">📈 하루 20만 목표!!! (Streamlit Ver)</h1>
+        <div style="display:flex; gap:10px;">
+            <button class="btn-backup" onclick="exportData()">💾 백업 저장</button>
+            <button class="btn-backup" onclick="document.getElementById('fileInput').click()">📂 데이터 복구</button>
+            <input type="file" id="fileInput" style="display:none" onchange="importData(this)" accept=".json">
+        </div>
+    </div>
+
+    <div class="summary-grid">
+        <div class="stat-card"><h3>💰 총 누적 손익</h3><p id="totalProfit" class="text-neutral">0원</p></div>
+        <div class="stat-card"><h3>📉 이번 달 수익</h3><p id="monthProfit" class="text-neutral">0원</p></div>
+        <div class="stat-card"><h3>⚖️ 평균 손익 (1회)</h3><p id="avgProfit" class="text-neutral">0원</p></div>
+        <div class="stat-card"><h3>🏆 베스트</h3><p id="bestStock" class="text-neutral">-</p></div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="assetChart"></canvas>
+    </div>
+
+    <div class="calendar-header">
+        <button class="btn-nav" onclick="changeMonth(-1)">◀ 이전</button>
+        <h2 id="currentMonthLabel"></h2>
+        <button class="btn-nav" onclick="changeMonth(1)">다음 ▶</button>
+    </div>
+    <div class="calendar-wrapper"><div class="calendar" id="calendarGrid"></div></div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title">거래 입력</h2>
+            <button class="btn-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group"><label class="form-label">날짜</label><input type="date" id="inputDate" class="form-input"></div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">구분</label>
+                    <select id="inputType" class="form-select" onchange="handleTypeChange()">
+                        <option value="buy">매수 (Buy)</option>
+                        <option value="sell">매도 (Sell)</option>
+                        <option value="other">기타 (예수금)</option>
+                    </select>
+                </div>
+                <div class="form-group"><label class="form-label">종목명</label><input type="text" id="inputName" class="form-input" placeholder="종목명"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label class="form-label" id="priceLabel">매수 단가</label><input type="number" id="inputPrice" class="form-input" placeholder="원"></div>
+                <div class="form-group"><label class="form-label">수량</label><input type="number" id="inputQty" class="form-input" value="1" placeholder="주"></div>
+            </div>
+            <div style="text-align: right; font-size: 11px; color: var(--text-sub); margin-bottom: 5px;">합계: <strong id="calcTotal">0</strong> 원</div>
             
-        price = st.number_input("단가/금액", value=0, step=100)
-        qty = st.number_input("수량", min_value=1, value=1)
+            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
+                <button class="btn-cancel" onclick="closeModal()">취소</button>
+                <button class="btn-save" onclick="save()">저장</button>
+            </div>
+
+            <div class="log-section">
+                <div style="font-size:12px; font-weight:700; color:#aaa; margin-bottom:10px;">🗓 기록 & 보유</div>
+                <div id="dayLogList"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentDate = new Date();
+    // 로컬 스토리지 사용 (브라우저에 저장)
+    let transactions = JSON.parse(localStorage.getItem('stockData_st')) || [];
+    let myChart = null;
+    let linkedBuyData = null; let currentMode = 'new';
+
+    function init() { renderAll(); }
+    function renderAll() { renderCalendar(); updateSummary(); renderChart(); }
+    function formatMoney(n) { return Number(n).toLocaleString() + '원'; }
+    
+    // 데이터 백업/복구 (JSON 파일)
+    function exportData() {
+        const dataStr = JSON.stringify(transactions);
+        const link = document.createElement('a');
+        link.href = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        link.download = 'stock_backup.json';
+        link.click();
+    }
+    function importData(input) {
+        const file = input.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if(confirm("기존 데이터를 덮어쓰시겠습니까?")) {
+                transactions = JSON.parse(e.target.result);
+                localStorage.setItem('stockData_st', JSON.stringify(transactions));
+                location.reload();
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // 차트
+    function renderChart() {
+        const ctx = document.getElementById('assetChart').getContext('2d');
+        let sortedLogs = [...transactions].sort((a,b) => new Date(a.date) - new Date(b.date));
+        let dateMap = new Map();
+        let currentTotal = 0;
+        sortedLogs.forEach(log => {
+            let val = 0;
+            if(log.type === 'sell') val = (log.profit || 0);
+            else if (log.type === 'other') val = (log.price || 0);
+            currentTotal += val;
+            dateMap.set(log.date, currentTotal);
+        });
+        const labels = Array.from(dateMap.keys());
+        const data = Array.from(dateMap.values());
+
+        if(myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: labels, datasets: [{ label: '자산', data: data, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.05)', borderWidth: 2, tension: 0.3, fill: true, pointRadius: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { beginAtZero: false } } }
+        });
+    }
+
+    // 달력
+    function renderCalendar() {
+        const grid = document.getElementById('calendarGrid');
+        const y = currentDate.getFullYear();
+        const m = currentDate.getMonth();
+        document.getElementById('currentMonthLabel').innerText = `${y}년 ${m+1}월`;
         
-        submitted = st.form_submit_button("기록 저장")
-        
-        if submitted:
-            new_id = int(time.time() * 1000)
-            date_str = date.strftime("%Y-%m-%d")
+        grid.innerHTML = `<div class="day-header" style="color:#ef4444">일</div><div class="day-header">월</div><div class="day-header">화</div><div class="day-header">수</div><div class="day-header">목</div><div class="day-header">금</div><div class="day-header" style="color:#3b82f6">토</div>`;
+        const first = new Date(y, m, 1).getDay();
+        const last = new Date(y, m+1, 0).getDate();
+
+        for(let i=0; i<first; i++) grid.innerHTML += `<div class="day" style="opacity:0; pointer-events:none;"></div>`;
+
+        for(let i=1; i<=last; i++) {
+            const dStr = `${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+            const logs = transactions.filter(t => t.date === dStr);
+            let emoji = '';
+            let prof = 0, hasSell = false, hasBuy = false;
+            logs.forEach(l => { if(l.type === 'sell') { hasSell=true; prof+=(l.profit||0); } if(l.type === 'buy') hasBuy=true; });
+            if(hasSell) emoji = (prof > 0 ? '😄' : '😭');
+            if(hasBuy && !hasSell) emoji = '🔥';
+
+            let html = `<div class="day" onclick="openModal('${dStr}')">
+                <div class="day-num">${i}</div>${emoji ? `<div class="day-emoji">${emoji}</div>` : ''}`;
             
-            if type_option == "매수 (Buy)" and name:
-                st.session_state.transactions.append({
-                    "id": new_id, "date": date_str, "type": "buy",
-                    "name": name, "price": price, "qty": qty, "remaining_qty": qty
-                })
-                st.success("매수 저장됨")
-                
-            elif type_option == "매도 (Sell)" and selected_holding_id:
-                target = next((t for t in st.session_state.transactions if t['id'] == selected_holding_id), None)
-                if target and qty <= target['remaining_qty']:
-                    target['remaining_qty'] -= qty
-                    profit = (price - target['price']) * qty
-                    st.session_state.transactions.append({
-                        "id": new_id, "date": date_str, "type": "sell",
-                        "name": target['name'], "price": price, "qty": qty,
-                        "linked_buy_id": target['id'], "profit": profit
-                    })
-                    st.success("매도 저장됨")
-                else:
-                    st.error("수량 오류")
-                    
-            elif type_option == "기타 (예수금)":
-                st.session_state.transactions.append({
-                    "id": new_id, "date": date_str, "type": "other",
-                    "name": name, "price": price, "qty": 1
-                })
-                st.success("저장됨")
+            logs.forEach(l => {
+                if(l.type === 'buy') html += `<div class="badge buy ${l.remainingQty===0?'sold-out':''}"><span>${l.name}</span></div>`;
+                else if(l.type === 'sell') html += `<div class="badge ${l.profit>=0?'sell-profit':'sell-loss'}"><span>${l.name}</span></div>`;
+                else html += `<div class="badge other"><span>${l.name}</span></div>`;
+            });
+            grid.innerHTML += html + `</div>`;
+        }
+    }
+    function changeMonth(d) { currentDate.setMonth(currentDate.getMonth()+d); renderCalendar(); }
 
-    st.markdown("---")
-    st.subheader("💾 데이터 관리")
-    
-    # 데이터 다운로드 (백업)
-    json_str = json.dumps(st.session_state.transactions, ensure_ascii=False, indent=4)
-    st.download_button("💾 백업 파일 다운로드", json_str, file_name="stock_backup.json", mime="application/json")
-    
-    # 데이터 업로드 (복구)
-    uploaded_file = st.file_uploader("📂 백업 파일 불러오기", type="json")
-    if uploaded_file is not None:
-        load_data(uploaded_file)
+    // 모달
+    function openModal(dStr) {
+        currentMode = 'new'; linkedBuyData = null;
+        document.getElementById('modalOverlay').style.display = 'flex';
+        document.getElementById('inputDate').value = dStr;
+        document.getElementById('inputType').disabled = false;
+        document.getElementById('inputType').value = 'buy';
+        document.getElementById('inputName').readOnly = false;
+        document.getElementById('inputName').value = '';
+        document.getElementById('inputPrice').value = '';
+        document.getElementById('inputQty').value = '1';
+        handleTypeChange(); renderLog(dStr);
+        document.getElementById('inputPrice').oninput = calc;
+        document.getElementById('inputQty').oninput = calc;
+    }
+    function closeModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+    function handleTypeChange() {
+        const t = document.getElementById('inputType').value;
+        const pl = document.getElementById('priceLabel');
+        const qi = document.getElementById('inputQty');
+        if(t === 'buy') { pl.innerText = "매수 단가"; qi.disabled = false; }
+        else if(t === 'sell') { pl.innerText = "매도 단가"; qi.disabled = false; }
+        else { pl.innerText = "금액 (+/-)"; qi.value = 1; qi.disabled = true; }
+        calc();
+    }
+    function calc() {
+        const p = Number(document.getElementById('inputPrice').value);
+        const q = Number(document.getElementById('inputQty').value);
+        document.getElementById('calcTotal').innerText = (p * q).toLocaleString();
+    }
+    function save() {
+        const d = document.getElementById('inputDate').value;
+        const t = document.getElementById('inputType').value;
+        const n = document.getElementById('inputName').value;
+        const p = Number(document.getElementById('inputPrice').value);
+        const q = Number(document.getElementById('inputQty').value);
 
-# --- 메인 대시보드 ---
-st.title("💰 주식 매매일지 Dashboard")
+        if(!n || (!p && p!==0) || !q) { alert("입력 확인"); return; }
 
-# 데이터 처리 및 통계 계산
-df = pd.DataFrame(st.session_state.transactions)
-total_profit = 0
-month_profit = 0
-avg_profit = 0
-sell_count = 0
-current_month = datetime.now().strftime("%Y-%m")
-asset_history = []
-temp_asset = 0
+        if(t === 'sell' && currentMode === 'sell_link' && linkedBuyData) {
+            if(q > linkedBuyData.remainingQty) { alert("보유 초과"); return; }
+            transactions.push({id:Date.now(), date:d, type:'sell', name:n, price:p, qty:q, linkedBuyId:linkedBuyData.id, profit:(p-linkedBuyData.price)*q});
+            linkedBuyData.remainingQty -= q;
+        } else if(t === 'buy') {
+            transactions.push({id:Date.now(), date:d, type:'buy', name:n, price:p, qty:q, remainingQty:q});
+        } else {
+            transactions.push({id:Date.now(), date:d, type:'other', name:n, price:p, qty:1});
+        }
+        localStorage.setItem('stockData_st', JSON.stringify(transactions));
+        if(t === 'sell') closeModal();
+        else { document.getElementById('inputName').value=''; document.getElementById('inputPrice').value=''; renderLog(d); }
+        renderAll();
+    }
 
-if not df.empty:
-    # 날짜 정렬
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date')
-    
-    for index, row in df.iterrows():
-        val = 0
-        if row['type'] == 'sell':
-            p = row.get('profit', 0)
-            total_profit += p
-            sell_count += 1
-            if row['date'].strftime("%Y-%m") == current_month:
-                month_profit += p
-            val = p
-        elif row['type'] == 'other':
-            val = row['price']
-            total_profit += val
-            if row['date'].strftime("%Y-%m") == current_month:
-                month_profit += val
+    function renderLog(dStr) {
+        const list = document.getElementById('dayLogList');
+        const logs = transactions.filter(x => x.date === dStr);
+        let html = '';
+        logs.forEach(g => {
+            let info = '';
+            if(g.type === 'buy') info = `[매수] ${g.qty}주`;
+            else if(g.type === 'sell') info = `[매도] 수익:${g.profit.toLocaleString()}`;
+            else info = `[기타] ${g.price.toLocaleString()}`;
+            html += `<div class="log-item"><div style="display:flex;flex-direction:column;"><span class="log-name">${g.name}</span><span class="log-detail">${info}</span></div><button class="btn-delete" onclick="del(${g.id})">&times;</button></div>`;
+        });
         
-        if val != 0:
-            temp_asset += val
-            asset_history.append({"date": row['date'], "asset": temp_asset})
-    
-    if sell_count > 0:
-        # 순수 매매 손익 합계 계산 (기타 제외)
-        pure_profit = sum([t.get('profit', 0) for t in st.session_state.transactions if t['type']=='sell'])
-        avg_profit = int(pure_profit / sell_count)
+        // 보유 종목 표시 (매도용)
+        const hlds = transactions.filter(x => x.type === 'buy' && x.remainingQty > 0);
+        if(hlds.length > 0) {
+            html += '<div style="font-size:12px; font-weight:700; color:#ea580c; margin:15px 0 5px 0;">📦 매도 가능 (클릭)</div>';
+            hlds.forEach(g => {
+                html += `<div class="log-item" style="border-left:3px solid #2563eb; cursor:pointer;" onclick="initiateSell(${g.id})"><div style="display:flex;flex-direction:column;"><span class="log-name">${g.name}</span><span class="log-detail">${g.date} | 잔여:${g.remainingQty}주</span></div></div>`;
+            });
+        }
+        list.innerHTML = html;
+    }
 
-# 1. 요약 카드
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("총 누적 자산", f"{total_profit:,}원")
-col2.metric("이번 달 수익", f"{month_profit:,}원")
-col3.metric("1회 평균 손익", f"{avg_profit:,}원")
-col4.metric("총 매도 횟수", f"{sell_count}회")
+    function initiateSell(bid) {
+        let b = transactions.find(x => x.id === bid); if(!b) return;
+        currentMode = 'sell_link'; linkedBuyData = b;
+        document.getElementById('inputType').value = 'sell'; document.getElementById('inputType').disabled = true;
+        document.getElementById('inputName').value = b.name; document.getElementById('inputName').readOnly = true;
+        document.getElementById('inputPrice').value = ''; document.getElementById('inputQty').value = b.remainingQty;
+        handleTypeChange();
+    }
 
-# 2. 자산 추이 그래프
-st.subheader("📈 자산 추이")
-if asset_history:
-    chart_df = pd.DataFrame(asset_history)
-    # 날짜별 마지막 자산 기준
-    chart_df = chart_df.groupby('date').last().reset_index()
-    fig = px.line(chart_df, x='date', y='asset', markers=True)
-    fig.update_traces(line_color='#2563eb', line_width=3)
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("거래 내역이 쌓이면 그래프가 표시됩니다.")
+    function del(id) {
+        if(!confirm("삭제하시겠습니까?")) return;
+        transactions = transactions.filter(x => x.id !== id);
+        localStorage.setItem('stockData_st', JSON.stringify(transactions));
+        renderLog(document.getElementById('inputDate').value); renderAll();
+    }
 
-# 3. 내역 탭
-tab1, tab2 = st.tabs(["📅 전체 내역", "📦 보유 종목"])
+    function updateSummary() {
+        let tp=0, mp=0, sc=0, sps=0, maxP=-Infinity, maxN="-", cm=`${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
+        transactions.forEach(t => {
+            if(t.type === 'sell') {
+                let p = t.profit||0; tp+=p; sps+=p; sc++;
+                if(t.date.startsWith(cm)) { mp+=p; if(p>maxP){maxP=p; maxN=t.name;} }
+            } else if(t.type === 'other') { tp+=t.price; if(t.date.startsWith(cm)) mp+=t.price; }
+        });
+        document.getElementById('totalProfit').innerText = formatMoney(tp);
+        document.getElementById('monthProfit').innerText = formatMoney(mp);
+        document.getElementById('avgProfit').innerText = formatMoney(sc>0?Math.round(sps/sc):0);
+        document.getElementById('bestStock').innerText = maxN;
+    }
 
-with tab1:
-    if not df.empty:
-        # 보기 좋게 가공
-        display_df = df.copy()
-        display_df['date'] = display_df['date'].dt.strftime("%Y-%m-%d")
-        
-        def make_desc(row):
-            if row['type'] == 'buy': return f"🔴 매수 | {row['name']}"
-            elif row['type'] == 'sell': return f"🔵 매도 | {row['name']} (수익: {row.get('profit',0):,}원)"
-            else: return f"⚪ 기타 | {row['name']}"
-            
-        display_df['내용'] = display_df.apply(make_desc, axis=1)
-        st.dataframe(display_df[['date', '내용', 'price', 'qty']].sort_values('date', ascending=False), use_container_width=True)
-    else:
-        st.write("기록이 없습니다.")
+    init();
+</script>
+</body>
+</html>
+"""
 
-with tab2:
-    holdings = [t for t in st.session_state.transactions if t['type'] == 'buy' and t.get('remaining_qty', 0) > 0]
-    if holdings:
-        h_df = pd.DataFrame(holdings)
-        h_df['평가액'] = h_df['price'] * h_df['remaining_qty']
-        st.dataframe(h_df[['date', 'name', 'price', 'remaining_qty', '평가액']], use_container_width=True)
-    else:
-        st.write("보유 중인 종목이 없습니다.")
+# Streamlit 안에 HTML 코드를 삽입 (높이는 넉넉하게 1200px)
+components.html(html_code, height=1200, scrolling=True)
